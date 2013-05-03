@@ -13,7 +13,7 @@ import argparse
 parser = argparse.ArgumentParser(description='find breaks in TIC data and analyse.')
 parser.add_argument('fileList', nargs='+', help='intput files')
 parser.add_argument('--desc', nargs='?', help='data description')
-parser.add_argument('--gap', nargs='?', default=3, help='maximum gap tolerance (s) between epochs')
+parser.add_argument('--gap', nargs='?', default='3', help='maximum gap tolerance (s) between epochs')
 args = parser.parse_args()
 inputFiles = args.fileList
 description = args.desc
@@ -96,7 +96,13 @@ def doStuff() :
         file = open(f)
         for line in (csv.reader(file)):
             #print line
-            date, hms, delta , unixtime = list(line)
+            #date, hms, delta , unixtime = list(line)
+            fields = list(line)
+            date = fields[0]
+            hms = fields[1]
+            delta = fields[2]
+            if len(fields) == 4 :
+                unixtime = fields[3]
             deltaTime = time.strptime(date+' '+hms+' UTC', "%Y/%m/%d %H:%M:%S %Z")
             if deltaTime < prevTime :
                 raise Exception("time went backward, out of order or error?")
@@ -127,56 +133,34 @@ def doStuff() :
     
     ## Find breaks and first differences for each series
     i1 = 0
-    i2 = 1
     goodData = []
     dataEpochList = []
     firstDiffList = []
     diffEpochList = []
     
-    while i1 <= len(dataArray) -2 :
-        first = dataArray[i1]
-        firstTime = timegm(first[0])
-        second = dataArray[i2]
-        secondTime = timegm(second[0])
-        while ( i2 + 1 <= len(dataArray) -1 ) and  (dataArray[i1][0] == dataArray[i2][0]) :
-            print "WARNING: possible duplicate: i2: " + repr(i2) + "time: " + repr(timegm(dataArray[i1][0])) + " & " + repr(timegm(dataArray[i2][0]))
-            i2 += 1
-#            second = dataArray[i2]
-#            secondTime = timegm(second[0])
+    while( i1 <= (len(dataArray)-2) ):
+        #print "DEBUG: i1: " + str(i1)
+        #print "DEBUG: first : " + str(timegm(dataArray[i1][0])) + " value: " + str(dataArray[i1][1])
+        #print "DEBUG: second: " + str(timegm(dataArray[i1+1][0])) + " value: " + str(dataArray[i1+1][1])
 
-        # here, i2 will be the largest index in the array slice with the same timestamp as index i1
-        if i2-i1 > 2 :
-            # more than 2 points with same timestamp, discard all duplicates, keep first
-            print "ERROR: too many measurements with the same timestamp: " + repr(timegm(dataArray[i1][0])) + " & " + repr(timegm(dataArray[i2][0]))
-            del(dataArray[i1+1:i2+1])
-            #raise Exception("too many consecutive data points with same timestamp")
-            # after delete, dataArray is shorter.  i1 still points to the same value, but i2
-            # points to a new data point.
-            # So, just reset i2 to the next index
-            i2 = i1+1
-            # now, the indexes are sequential and point to consecutive data in the modified array
-            # we logged an error, because this may not be the correct way to handle this error
-            # we can simply go on from here without any extra flow changes
-            # because we want to check for gaps, still, but we've elimitnated
-            # the possiblity that we have duplcate data.
-        elif i2-i1 == 2 :
-            # only two consecutive data points with the same timestamp
-            # at this point i1 and i2 have only one point between them, which has the same time as i1
-            # check the data of i1 and the next one, backtracking a bit
-            if dataArray[i1][1] == dataArray[i1+1][1] :
-                # same data too; statistically improbable, probably an error, discard
-                # dont' have to check three for this, as they would get caught by previous check anyway
-                print "ERROR: duplicate measurement: " + repr(dataArray[i1][1]) + " & " + repr(dataArray[i1+1][1])
-                del(dataArray[i1+1])
-                # i1 still points to the same data, but
-                # reset i2 to the next sequential index and go on
-                i2 = i1+1
-    
+        while( (i1 < len(dataArray)-1-2) and (dataArray[i1][0] == dataArray[i1+2][0]) ) :
+            #print "DEBUG: third : " + str(dataArray[i1+2][0]) + str(timegm(dataArray[i1+2][1]))
+            # keep deleting the data two points ahead so long as it has the same time as i1,
+            # since that is either out of order or three data points with the same time, which
+            # shouldn't happen
+            print "ERROR: too many measurements with the same timestamp: " + repr(timegm(dataArray[i1][0])) + " & " + repr(timegm(dataArray[i1+2][0]))
+            del( dataArray[i1+2] )
+
+        while ( (i1 < len(dataArray)-1-1) and (dataArray[i1][0] == dataArray[i1+2][0]) and (dataArray[i1][1] == dataArray[i1+1][1]) ) :
+            # keep deleteing the next data point until duplicates are gone
+            print "ERROR: found duplicate time: " + repr(timegm(dataArray[i1][0])) + " and value: " + repr(dataArray[i1][1])
+            del( dataArray[i1+1] )
+
         ## okay, these points are not obviously bad
         # check for missing data, carve data set into epochs
         # reset first and second variables, things may have changed
         first = dataArray[i1]
-        second = dataArray[i2]
+        second = dataArray[i1+1]
         firstTime = timegm(first[0])
         secondTime = timegm(second[0])
         if firstTime + maxEpochGap < secondTime :
@@ -198,11 +182,12 @@ def doStuff() :
             diff = [ first[0] , ( second[1] - first[1] ) ]
             #print "DEBUG: frist diff = " + repr(diff)
             firstDiffList.append( diff )
-    
-        # next pair of points
-        i1 = i2
-        i2 = i1 + 1
+        # incriment index
+        i1 += 1
     #end while loop#
+    # here all but the last data point has been processed, don't forget it
+    # we assume it's good
+    goodData.append(dataArray[i1])
 
     # store last data and diff lists in the epoch lists as the last epoch of their series
     dataEpochList.append(goodData)
