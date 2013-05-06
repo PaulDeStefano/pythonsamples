@@ -12,19 +12,62 @@ import argparse
 
 parser = argparse.ArgumentParser(description='find breaks in TIC data and analyse.')
 parser.add_argument('fileList', nargs='+', help='intput files')
-parser.add_argument('--desc', nargs='?', help='data description')
-parser.add_argument('--gap', nargs='?', default='3', help='maximum gap tolerance (s) between epochs')
+parser.add_argument('--desc', nargs='?', help='data description', default='DEFAULT DESCRIPTION')
+parser.add_argument('-g', '-gap', nargs='?', default='3', help='maximum gap tolerance (s) between epochs')
+parser.add_argument('--offsets', nargs='?', help='file continating xPPSoffset values')
+parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='boolean, if set, add offset values measurement (dT) ')
+parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='boolean, if set, subtract offset values from measurements (dT)')
 args = parser.parse_args()
 inputFiles = args.fileList
 description = args.desc
-maxEpochGap = float(args.gap)
+maxEpochGap = float(args.g)
+offsetFile = args.offsets
+negOffset = args.negOffset
+#print("DEBUG: negOffset:" + str(negOffset) )
+
+# xPPSoffset data
+stupidList = []
 
 def analyseSet(dataSet,label='lablel',title="title"):
     timeL , valueL = [],[]
-    for pair in dataSet:
-        timeL.append(pair[0])
-        valueL.append(pair[1])
+    valueFixedL = []
+    #print "DEBUG: offsetDB is" , len(offsetDB)
+    for t,val in dataSet:
+        timeL.append(t)
+        valueL.append(val)
 
+    if len(stupidList):
+        offsetDB = stupidList[0]
+        unixtList = list(offsetDB['unixtime'])
+        offsetList = list(offsetDB['offset'])
+        offsetDBlen = len(offsetDB)
+        coeff = 1
+        if negOffset:
+            coeff = -1
+        lastIndex = 0
+        for t,val in dataSet:
+            unixt = timegm(t)
+            #print "DEBUG: searching for:",unixt
+            if lastIndex > 10 :
+                # backtrack a bit in case things are out of order slightly
+                lastIndex -= 9
+            while( lastIndex <= offsetDBlen-1 and not (unixt == unixtList[lastIndex]) ):
+                #print "DEBUG: unixttime:",unixtList[lastIndex]
+                lastIndex += 1
+            if( lastIndex <= offsetDBlen-1 ):
+                # success
+                offsetVal = offsetList[lastIndex]
+            else:
+                # failure
+                raise Exception("could not find value in offsetDB: "+str(unixt))
+            # apply offset
+            valFixed=(val + coeff*offsetVal/(1e09))
+            valueFixedL.append(valFixed)
+            #print 'DEBUG: val:{} offset:{} fixed:{}'.format(val,offsetVal,valFixed)
+            #print "DEBUG: success"
+
+    #print "DEBUG:",len(valueL),len(valueFixedL)
+        
     # show epoch
     startasc = time.asctime(timeL[0])
     startUNIX = str( timegm(timeL[0]) )
@@ -36,8 +79,8 @@ def analyseSet(dataSet,label='lablel',title="title"):
     # simple stats
     mean = np.mean(valueL)
     print "mean:", mean
-    median = np.median(valueL)
-    print "median:", median
+    #median = np.median(valueL)
+    #print "median:", median
     stddev = np.std(valueL)
     print "stddev:", stddev
 
@@ -67,7 +110,40 @@ def analyseSet(dataSet,label='lablel',title="title"):
     ax.set_xlabel("Bins of "+label)
     ax.set_ylabel("Counts")
     ax.legend()
+    fig2.autofmt_xdate()
     print("showing histogram of values")
+    plt.show()
+
+    # Apply offsets, and replot
+    fig3 = plt.figure()
+    ax = fig3.add_subplot(1,1,1)
+    mean = np.mean(valueFixedL)
+    stddev = np.std(valueFixedL)
+    print "mean:", mean
+    print "stddev:", stddev
+    y = [ (d - mean) for d in valueFixedL ]
+    ax.plot_date( x, y, fmt='go' , xdate=True, ydate=False , label=label, tz='UTC')
+    ax.axes.set_title('(adjusted) '+title)
+    ax.set_xlabel("Time: "+startasc+' - '+endasc)
+    ax.set_ylabel(label+" (adjusted) - mean of "+str(mean)+" (s)")
+    ax.legend()
+    fig3.autofmt_xdate()
+    print("showing plot of fixed values")
+    plt.show()
+
+    # plot histogram of values series
+    fig4 = plt.figure()
+    ax = fig4.add_subplot(1,1,1)
+    n, bins, patches = ax.hist( valueFixedL, 100 , label=label)
+    #hist, binEdges = np.histogram( valueL, 100)
+    #print hist
+    #print n, bins, patches
+    ax.axes.set_title("(adjusted) Histogram of "+title)
+    ax.set_xlabel("Bins of "+label)
+    ax.set_ylabel("Counts")
+    ax.legend()
+    fig4.autofmt_xdate()
+    print("showing histogram of fixed values")
     plt.show()
 
     # replot histogram within range limited to 7 stddev of mean
@@ -128,7 +204,7 @@ def doStuff() :
 
     # show all data
     print "Preview: ploting the complete raw dataset..."
-    analyseSet(dataArray, label="dT", title="dT: "+description)
+    #analyseSet(dataArray, label="dT", title="dT: "+description)
     print "...done."
     
     ## Find breaks and first differences for each series
@@ -206,7 +282,27 @@ def doStuff() :
         print "Analysing first differences"
         analyseSet( diffSet , "dT1-dT2" , "First Differences: "+description )
         print "...done"
-    
+
+def getOffsets(file):
+    """ retreive xPPSOffset values
+    """
+    print("DEBUG: trying to import offset data...")
+    with open(file,'r') as fh:
+        stupidList[0] = db = np.loadtxt(fh,dtype={'names': ('asctime','offset','unixtime'), 'formats':('S19',np.float64,np.float64)}, delimiter=',')
+        offsetDB = stupidList[0]
+        #print("DEBUG: " + str(offsetDB.shape) )
+        #print("DEBUG: " + str(offsetDB) )
+        #print("DEBUG: " + str(offsetDB.dtype) )
+        #print("DEBUG: " + str(offsetDB['unixtime']) )
+        #print("DEBUG: " + str(offsetDB['offset']) )
+        #i = list(offsetDB['unixtime']).index(1365551993)
+        #print offsetDB[i]['offset']
+    print("DEBUG: ...done ", len(offsetDB))
+
 ## MAIN ##
 print "DEBUG: input files:" + repr(inputFiles)
+if len(stupidList) :
+    getOffsets(offsetFile)
+    if not stupidList:
+        raise Exception('argh!')
 doStuff()
