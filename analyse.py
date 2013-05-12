@@ -1,4 +1,22 @@
 #!/usr/bin/python2.7
+""" analyse.py
+    Analyse ToF TIC data.
+
+    Copyright (C) 2013 Paul R. DeStefano
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
 import csv
 import numpy as np
 import matplotlib
@@ -89,8 +107,7 @@ def doXPPSCorrections(dataSet):
     return valueFixedL
 
 def analyseSet(dataSet,label='lable',title="title"):
-    global numBins
-    global description, maxEpochGap
+    global numBins, description, maxEpochGap
 
     # separate data into columns
     timeL , valueL = [],[]
@@ -118,12 +135,12 @@ def analyseSet(dataSet,label='lable',title="title"):
     valueFixedL = []
     if len(offsetDB):
         valueFixedL = doXPPSCorrections( dataSet )
-        print("DEBUG: "+repr(type(valueFixedL)) )
+        #print("DEBUG: "+repr(type(valueFixedL)) )
     meanFixed = np.mean(valueFixedL)
     stddevFixed = np.std(valueFixedL)
         
-    print("DEBUG: length of values: {}".format(len(valueL)) )
-    print("DEBUG: length of fixed values: {}".format(len(valueFixedL)) )
+    #print("DEBUG: length of values: {}".format(len(valueL)) )
+    #print("DEBUG: length of fixed values: {}".format(len(valueFixedL)) )
 
     # start plot
     fig1 = plt.figure()
@@ -167,8 +184,8 @@ def analyseSet(dataSet,label='lable',title="title"):
     #  Plot offset corrected values
     fig3 = plt.figure()
     ax = fig3.add_subplot(1,1,1)
-    print "mean:", meanFixed
-    print "stddev:", stddevFixed
+    print "adjusted mean:", meanFixed
+    print "adjusted stddev:", stddevFixed
     y = [ (d - mean) for d in valueFixedL ]
     extraText = r'$\sigma$'+'={0:.2G}'.format(stddevFixed)
     ax.plot_date( x, y, fmt='bo' , xdate=True, ydate=False , label=label, tz='UTC')
@@ -241,7 +258,7 @@ def doStuff() :
     prevTime = 0
     good = True
     for f in inputFiles:
-        print "DEBUG: working on file: " + f
+        print "NOTICE: working on file: " + f
         file = open(f)
         for line in (csv.reader(file)):
             #print line
@@ -270,9 +287,9 @@ def doStuff() :
                 break
             prevTime = deltaTime
     
-    print "NOTICE: Finished processing input"
-    print "DEBUG: len(dataBuffer): " + repr(len(dataBuffer))
-    print "DEBUG: len(dataArray): " + repr(len(dataArray))
+    print "NOTICE: Finished processing all input files"
+    #print "DEBUG: len(dataBuffer): " + repr(len(dataBuffer))
+    #print "DEBUG: len(dataArray): " + repr(len(dataArray))
     dataArray = dataArray + dataBuffer
 
     # show all data
@@ -342,7 +359,7 @@ def doStuff() :
     dataEpochList.append(goodData)
     diffEpochList.append(firstDiffList)
     # what did we find?
-    print "NOTICE: epochs found: " + repr(len(diffEpochList))
+    #print "DEBUG: first difference epochs found: " + repr(len(diffEpochList))
     print "NOTICE: epochs found: " + repr(len(dataEpochList))
 
     ## Plot data, differences, and histograms for each epoch
@@ -374,11 +391,11 @@ def loadOffsets(file):
         #print("DEBUG: " + str(offsetDB['offset']) )
         #i = list(offsetDB['unixtime']).index(1365551993)
         #print offsetDB[i]['offset']
-    print("DEBUG: imported {} offset values".format(len(offsetDB)) )
+    #print("DEBUG: imported {} offset values".format(len(offsetDB)) )
     print("NOTICE: ...done ")
 
 ## MAIN ##
-print "DEBUG: input files:" + repr(inputFiles)
+#print "DEBUG: input files:" + repr(inputFiles)
 if offsetFile:
     loadOffsets(offsetFile)
     if not len(offsetDB):
