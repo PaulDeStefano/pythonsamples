@@ -1,3 +1,4 @@
+#!/usr/bin/python2.7
 import csv
 import numpy as np
 import matplotlib
@@ -10,13 +11,13 @@ import datetime
 from calendar import timegm
 import argparse
 
-parser = argparse.ArgumentParser(description='find breaks in TIC data and analyse.')
-parser.add_argument('fileList', nargs='+', help='intput files')
-parser.add_argument('--desc', nargs='?', help='data description', default='DEFAULT DESCRIPTION')
-parser.add_argument('-g', '-gap', nargs='?', default='3', help='maximum gap tolerance (s) between epochs')
-parser.add_argument('--offsets', nargs='?', help='file continating xPPSoffset values')
-parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='boolean, if set, add offset values measurement (dT) ')
-parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='boolean, if set, subtract offset values from measurements (dT)')
+parser = argparse.ArgumentParser(description='Find breaks in TIC data and analyse.')
+parser.add_argument('fileList', nargs='+', help='TIC data files')
+parser.add_argument('--desc', nargs='?', help='Description (title) for plots', default='DEFAULT DESCRIPTION')
+parser.add_argument('-g', '-gap', nargs='?', default='3', help='Maximum gap/tolerance (s) between epochs')
+parser.add_argument('--offsets', nargs='?', help='File continating xPPSoffset values (from sbf2offset.py)')
+parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='Boolean.  Add offset values to TIC measurements (dT)')
+parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='Boolean. Subtract offset values from TIC measurements (dT)')
 args = parser.parse_args()
 inputFiles = args.fileList
 description = args.desc
@@ -26,55 +27,73 @@ negOffset = args.negOffset
 #print("DEBUG: negOffset:" + str(negOffset) )
 
 # xPPSoffset data
-stupidList = []
+offsetDB = []
 
-def analyseSet(dataSet,label='lablel',title="title"):
-    timeL , valueL = [],[]
-    valueFixedL = []
+def doXPPSCorrections(dataSet):
+    """ Apply xPPSOffset values to the given (TIC) data set
+    """
+    global offsetDB
     #print "DEBUG: offsetDB is" , len(offsetDB)
+    valueFixedL = []
+
+    unixtList = list(offsetDB['unixtime'])
+    offsetList = list(offsetDB['offset'])
+    offsetDBlen = len(offsetDB)
+    coeff = 1
+    if negOffset:
+        # reverse sign of correction if set (default)
+        coeff = -1
+
+    # A brute-force search of the full correction series was taking a long time.
+    # We impliment a pointer than preserves the index of the last match, and prevents
+    # the next match from having to re-compare previous matches.
+    # This assumes both dataSet and offsetList are already nearly sorted.
+    lastIndex = 0
+    for t,val in dataSet:
+        unixt = timegm(t)
+        #print "DEBUG: searching for:",unixt
+        if lastIndex > 10 :
+            # backtrack a bit in case things are out of order slightly
+            lastIndex -= 9
+        while( lastIndex <= offsetDBlen-1 and not (unixt == unixtList[lastIndex]) ):
+            #print "DEBUG: unixttime:",unixtList[lastIndex]
+            lastIndex += 1
+        if( lastIndex <= offsetDBlen-1 ):
+            # success
+            offsetVal = offsetList[lastIndex]
+        else:
+            # failure
+            raise Exception("could not find value in offsetDB: "+str(unixt))
+        # apply offset
+        valFixed=(val + coeff*offsetVal/(1e09))
+        valueFixedL.append(valFixed)
+        #print 'DEBUG: val:{} offset:{} fixed:{}'.format(val,offsetVal,valFixed)
+        #print "DEBUG: success"
+
+    return valueFixedL
+
+def analyseSet(dataSet,label='lable',title="title"):
+
+    # perform xPPSOffset corrections, if we have them
+    valueFixedL = []
+    if len(offsetDB):
+        valueFixedL = doXPPSCorrections( dataSet )
+        
+    # separate data into columns
+    timeL , valueL = [],[]
     for t,val in dataSet:
         timeL.append(t)
         valueL.append(val)
+    print("DEBUG: lenght of values: {}".format(len(valueL)) )
+    print("DEBUG: length of fixed values: {}".format(len(valueFixedL)) )
 
-    if len(stupidList):
-        offsetDB = stupidList[0]
-        unixtList = list(offsetDB['unixtime'])
-        offsetList = list(offsetDB['offset'])
-        offsetDBlen = len(offsetDB)
-        coeff = 1
-        if negOffset:
-            coeff = -1
-        lastIndex = 0
-        for t,val in dataSet:
-            unixt = timegm(t)
-            #print "DEBUG: searching for:",unixt
-            if lastIndex > 10 :
-                # backtrack a bit in case things are out of order slightly
-                lastIndex -= 9
-            while( lastIndex <= offsetDBlen-1 and not (unixt == unixtList[lastIndex]) ):
-                #print "DEBUG: unixttime:",unixtList[lastIndex]
-                lastIndex += 1
-            if( lastIndex <= offsetDBlen-1 ):
-                # success
-                offsetVal = offsetList[lastIndex]
-            else:
-                # failure
-                raise Exception("could not find value in offsetDB: "+str(unixt))
-            # apply offset
-            valFixed=(val + coeff*offsetVal/(1e09))
-            valueFixedL.append(valFixed)
-            #print 'DEBUG: val:{} offset:{} fixed:{}'.format(val,offsetVal,valFixed)
-            #print "DEBUG: success"
-
-    #print "DEBUG:",len(valueL),len(valueFixedL)
-        
-    # show epoch
+    # display epoch
     startasc = time.asctime(timeL[0])
     startUNIX = str( timegm(timeL[0]) )
     endasc = time.asctime(timeL[len(timeL)-1])
     endUNIX = str( timegm(timeL[len(timeL)-1]) )
-    print 'start: '+startasc+' '+startUNIX
-    print 'end  : '+endasc+' '+endUNIX
+    print 'epoch start: '+startasc+' '+startUNIX
+    print 'epoch end  : '+endasc+' '+endUNIX
 
     # simple stats
     mean = np.mean(valueL)
@@ -283,13 +302,17 @@ def doStuff() :
         analyseSet( diffSet , "dT1-dT2" , "First Differences: "+description )
         print "...done"
 
-def getOffsets(file):
-    """ retreive xPPSOffset values
+def loadOffsets(file):
+    """ Retreive xPPSOffset values from file.
+        Assumed format is
+                <ISO8601 date/time>,<offset>,<UNIXtime>
+        This matches sbf2offset.py output format
     """
-    print("DEBUG: trying to import offset data...")
+    global offsetDB
+
+    print("NOTICE: trying to import offset data...")
     with open(file,'r') as fh:
-        stupidList[0] = db = np.loadtxt(fh,dtype={'names': ('asctime','offset','unixtime'), 'formats':('S19',np.float64,np.float64)}, delimiter=',')
-        offsetDB = stupidList[0]
+        offsetDB = np.loadtxt(fh,dtype={'names': ('asctime','offset','unixtime'), 'formats':('S19',np.float64,np.float64)}, delimiter=',')
         #print("DEBUG: " + str(offsetDB.shape) )
         #print("DEBUG: " + str(offsetDB) )
         #print("DEBUG: " + str(offsetDB.dtype) )
@@ -297,12 +320,13 @@ def getOffsets(file):
         #print("DEBUG: " + str(offsetDB['offset']) )
         #i = list(offsetDB['unixtime']).index(1365551993)
         #print offsetDB[i]['offset']
-    print("DEBUG: ...done ", len(offsetDB))
+    print("DEBUG: imported {} offset values".format(len(offsetDB)) )
+    print("NOTICE: ...done ")
 
 ## MAIN ##
 print "DEBUG: input files:" + repr(inputFiles)
-if len(stupidList) :
-    getOffsets(offsetFile)
-    if not stupidList:
-        raise Exception('argh!')
+if offsetFile:
+    loadOffsets(offsetFile)
+    if not len(offsetDB):
+        raise Exception('XPPSOffset values NOT loaded!',len(offsetDB))
 doStuff()
