@@ -2,37 +2,53 @@
 import csv
 import numpy as np
 import matplotlib
+from matplotlib import rc
 #matplotlib.use('svg')
 import matplotlib.pyplot as plt
+from matplotlib.offsetbox import AnchoredOffsetbox, TextArea
 from array import array
-import matplotlib.mlab as mlab
 import time
 import datetime
 from calendar import timegm
 import argparse
 
+rc('text',usetex=True)
+#rc('font',family='serif')
+
 parser = argparse.ArgumentParser(description='Find breaks in TIC data and analyse.')
 parser.add_argument('fileList', nargs='+', help='TIC data files')
 parser.add_argument('--desc', nargs='?', help='Description (title) for plots', default='DEFAULT DESCRIPTION')
-parser.add_argument('-g', '-gap', nargs='?', default='3', help='Maximum gap/tolerance (s) between epochs')
+parser.add_argument('-g', '--gap', nargs='?', default='3', help='Maximum gap/tolerance (s) between epochs')
 parser.add_argument('--offsets', nargs='?', help='File continating xPPSoffset values (from sbf2offset.py)')
 parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='Boolean.  Add offset values to TIC measurements (dT)')
 parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='Boolean. Subtract offset values from TIC measurements (dT)')
+parser.add_argument('--histbins', nargs='?', default=100, help='Number of bins in histograms')
 args = parser.parse_args()
 inputFiles = args.fileList
 description = args.desc
-maxEpochGap = float(args.g)
+maxEpochGap = float(args.gap)
 offsetFile = args.offsets
 negOffset = args.negOffset
+numBins = args.histbins
 #print("DEBUG: negOffset:" + str(negOffset) )
 
 # xPPSoffset data
 offsetDB = []
 
+class AnchoredText( AnchoredOffsetbox ):
+    def __init__(self, s, loc, pad=0.4, borderpad=0.5, prop=None, frameon=True):
+        #self.txt = TextArea(s, minimumdecent=False)
+        self.txt = TextArea(s)
+        super(AnchoredText,self).__init__(loc,pad=pad,borderpad=borderpad,
+                                            child=self.txt,
+                                            prop=prop,
+                                            frameon=frameon)
+
 def doXPPSCorrections(dataSet):
     """ Apply xPPSOffset values to the given (TIC) data set
     """
     global offsetDB
+    global negOffset
     #print "DEBUG: offsetDB is" , len(offsetDB)
     valueFixedL = []
 
@@ -73,19 +89,14 @@ def doXPPSCorrections(dataSet):
     return valueFixedL
 
 def analyseSet(dataSet,label='lable',title="title"):
+    global numBins
+    global description, maxEpochGap
 
-    # perform xPPSOffset corrections, if we have them
-    valueFixedL = []
-    if len(offsetDB):
-        valueFixedL = doXPPSCorrections( dataSet )
-        
     # separate data into columns
     timeL , valueL = [],[]
     for t,val in dataSet:
         timeL.append(t)
         valueL.append(val)
-    print("DEBUG: lenght of values: {}".format(len(valueL)) )
-    print("DEBUG: length of fixed values: {}".format(len(valueFixedL)) )
 
     # display epoch
     startasc = time.asctime(timeL[0])
@@ -103,17 +114,35 @@ def analyseSet(dataSet,label='lable',title="title"):
     stddev = np.std(valueL)
     print "stddev:", stddev
 
+    # perform xPPSOffset corrections, if we have them
+    valueFixedL = []
+    if len(offsetDB):
+        valueFixedL = doXPPSCorrections( dataSet )
+        print("DEBUG: "+repr(type(valueFixedL)) )
+    meanFixed = np.mean(valueFixedL)
+    stddevFixed = np.std(valueFixedL)
+        
+    print("DEBUG: length of values: {}".format(len(valueL)) )
+    print("DEBUG: length of fixed values: {}".format(len(valueFixedL)) )
+
+    # start plot
+    fig1 = plt.figure()
+    ax = fig1.add_subplot(1,1,1)
     # plot data in this series (-mean)
     x = [ matplotlib.dates.date2num( datetime.datetime.utcfromtimestamp( timegm(t) ) ) for t in timeL ]
     y = [ (d - mean) for d in valueL ]
-
-    fig1 = plt.figure()
-    ax = fig1.add_subplot(1,1,1)
     ax.plot_date( x, y, fmt='go' , xdate=True, ydate=False , label=label, tz='UTC')
+    extraText = r'$\sigma$'+'={0:.2G}'.format(stddev)
+
+    # beautify
     ax.axes.set_title(title)
     ax.set_xlabel("Time: "+startasc+' - '+endasc)
     ax.set_ylabel(label+" - mean of "+str(mean)+" (s)")
-    ax.legend()
+    at = AnchoredText(extraText, loc=1, frameon=True)
+    ax.add_artist( at )
+    #ax.text(0.8,0.8,r'$\pi this is a test$',transform = ax.transAxes)
+    #ax.legend()
+    # legend.get_frame().set_alpha(0.5)
     fig1.autofmt_xdate()
     print("showing plot of values")
     plt.show()
@@ -121,31 +150,35 @@ def analyseSet(dataSet,label='lable',title="title"):
     # plot histogram of values series
     fig2 = plt.figure()
     ax = fig2.add_subplot(1,1,1)
-    n, bins, patches = ax.hist( valueL, 100 , label=label)
-    #hist, binEdges = np.histogram( valueL, 100)
+    n, bins, patches = ax.hist( valueL, numBins , label=label)
+    #hist, binEdges = np.histogram( valueL, numBins)
     #print hist
     #print n, bins, patches
     ax.axes.set_title("Histogram of "+title)
-    ax.set_xlabel("Bins of "+label)
+    ax.set_xlabel(str(numBins)+" bins of "+label)
     ax.set_ylabel("Counts")
-    ax.legend()
+    #ax.legend()
+    # legend.get_frame().set_alpha(0.5)
+    ax.add_artist( at )
     fig2.autofmt_xdate()
     print("showing histogram of values")
     plt.show()
 
-    # Apply offsets, and replot
+    #  Plot offset corrected values
     fig3 = plt.figure()
     ax = fig3.add_subplot(1,1,1)
-    mean = np.mean(valueFixedL)
-    stddev = np.std(valueFixedL)
-    print "mean:", mean
-    print "stddev:", stddev
+    print "mean:", meanFixed
+    print "stddev:", stddevFixed
     y = [ (d - mean) for d in valueFixedL ]
-    ax.plot_date( x, y, fmt='go' , xdate=True, ydate=False , label=label, tz='UTC')
+    extraText = r'$\sigma$'+'={0:.2G}'.format(stddevFixed)
+    ax.plot_date( x, y, fmt='bo' , xdate=True, ydate=False , label=label, tz='UTC')
     ax.axes.set_title('(adjusted) '+title)
     ax.set_xlabel("Time: "+startasc+' - '+endasc)
     ax.set_ylabel(label+" (adjusted) - mean of "+str(mean)+" (s)")
-    ax.legend()
+    #ax.legend()
+    # legend.get_frame().set_alpha(0.5)
+    at = AnchoredText(extraText, loc=1, frameon=True)
+    ax.add_artist( at )
     fig3.autofmt_xdate()
     print("showing plot of fixed values")
     plt.show()
@@ -153,17 +186,38 @@ def analyseSet(dataSet,label='lable',title="title"):
     # plot histogram of values series
     fig4 = plt.figure()
     ax = fig4.add_subplot(1,1,1)
-    n, bins, patches = ax.hist( valueFixedL, 100 , label=label)
-    #hist, binEdges = np.histogram( valueL, 100)
+    n, bins, patches = ax.hist( valueFixedL, numBins , label=label)
+    #hist, binEdges = np.histogram( valueL, numBins)
     #print hist
     #print n, bins, patches
     ax.axes.set_title("(adjusted) Histogram of "+title)
-    ax.set_xlabel("Bins of "+label)
+    ax.set_xlabel(str(numBins)+" bins of "+label)
     ax.set_ylabel("Counts")
-    ax.legend()
+    #ax.legend()
+    # legend.get_frame().set_alpha(0.5)
+    ax.add_artist( at )
     fig4.autofmt_xdate()
     print("showing histogram of fixed values")
     plt.show()
+
+    # replot both raw and fixed data together
+    if len(valueFixedL):
+        fig1 = plt.figure()
+        ax = fig1.add_subplot(1,1,1)
+        y = [ (d - mean) for d in valueL ]
+        extraText = '('+r'$\sigma$'+'={0:.2G}'.format(stddev)+')'
+        ax.plot_date( x, y, fmt='go' , xdate=True, ydate=False , label=label+" "+extraText, tz='UTC')
+        y = [ (d - mean) for d in valueFixedL ]
+        extraText = '('+r'$\sigma$'+'={0:.2G}'.format(stddevFixed)+')'
+        ax.plot_date( x, y, fmt='bo' , xdate=True, ydate=False , label="adjusted "+label+" "+extraText, tz='UTC')
+        ax.axes.set_title(title)
+        ax.set_xlabel("Time: "+startasc+' - '+endasc)
+        ax.set_ylabel(label+" (adjusted) - mean of "+str(mean)+" (s)")
+        leg = ax.legend()
+        leg.get_frame().set_alpha(0.7)
+        fig1.autofmt_xdate()
+        print("overploting fixed values")
+        plt.show()
 
     # replot histogram within range limited to 7 stddev of mean
     #n, bins, patches = plt.hist( valueL, 100, range=[mean-6*stddev,mean+6*stddev] , label=label)
@@ -222,9 +276,9 @@ def doStuff() :
     dataArray = dataArray + dataBuffer
 
     # show all data
-    print "Preview: ploting the complete raw dataset..."
+    #print "Preview: ploting the complete raw dataset..."
     #analyseSet(dataArray, label="dT", title="dT: "+description)
-    print "...done."
+    #print "...done."
     
     ## Find breaks and first differences for each series
     i1 = 0
