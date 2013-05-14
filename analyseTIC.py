@@ -182,40 +182,41 @@ def analyseSet(dataSet,label='lable',title="title"):
     plt.show()
 
     #  Plot offset corrected values
-    fig3 = plt.figure()
-    ax = fig3.add_subplot(1,1,1)
-    print "adjusted mean:", meanFixed
-    print "adjusted stddev:", stddevFixed
-    y = [ (d - mean) for d in valueFixedL ]
-    extraText = r'$\sigma$'+'={0:.2G}'.format(stddevFixed)
-    ax.plot_date( x, y, fmt='bo' , xdate=True, ydate=False , label=label, tz='UTC')
-    ax.axes.set_title('(adjusted) '+title)
-    ax.set_xlabel("Time: "+startasc+' - '+endasc)
-    ax.set_ylabel(label+" (adjusted) - mean of "+str(mean)+" (s)")
-    #ax.legend()
-    # legend.get_frame().set_alpha(0.5)
-    at = AnchoredText(extraText, loc=1, frameon=True)
-    ax.add_artist( at )
-    fig3.autofmt_xdate()
-    print("showing plot of fixed values")
-    plt.show()
+    if len(valueFixedL):
+        fig3 = plt.figure()
+        ax = fig3.add_subplot(1,1,1)
+        print "adjusted mean:", meanFixed
+        print "adjusted stddev:", stddevFixed
+        y = [ (d - mean) for d in valueFixedL ]
+        extraText = r'$\sigma$'+'={0:.2G}'.format(stddevFixed)
+        ax.plot_date( x, y, fmt='bo' , xdate=True, ydate=False , label=label, tz='UTC')
+        ax.axes.set_title('(adjusted) '+title)
+        ax.set_xlabel("Time: "+startasc+' - '+endasc)
+        ax.set_ylabel(label+" (adjusted) - mean of "+str(mean)+" (s)")
+        #ax.legend()
+        # legend.get_frame().set_alpha(0.5)
+        at = AnchoredText(extraText, loc=1, frameon=True)
+        ax.add_artist( at )
+        fig3.autofmt_xdate()
+        print("showing plot of fixed values")
+        plt.show()
 
-    # plot histogram of values series
-    fig4 = plt.figure()
-    ax = fig4.add_subplot(1,1,1)
-    n, bins, patches = ax.hist( valueFixedL, numBins , label=label)
-    #hist, binEdges = np.histogram( valueL, numBins)
-    #print hist
-    #print n, bins, patches
-    ax.axes.set_title("(adjusted) Histogram of "+title)
-    ax.set_xlabel(str(numBins)+" bins of "+label)
-    ax.set_ylabel("Counts")
-    #ax.legend()
-    # legend.get_frame().set_alpha(0.5)
-    ax.add_artist( at )
-    fig4.autofmt_xdate()
-    print("showing histogram of fixed values")
-    plt.show()
+        # plot histogram of values series
+        fig4 = plt.figure()
+        ax = fig4.add_subplot(1,1,1)
+        n, bins, patches = ax.hist( valueFixedL, numBins , label=label)
+        #hist, binEdges = np.histogram( valueL, numBins)
+        #print hist
+        #print n, bins, patches
+        ax.axes.set_title("(adjusted) Histogram of "+title)
+        ax.set_xlabel(str(numBins)+" bins of "+label)
+        ax.set_ylabel("Counts")
+        #ax.legend()
+        # legend.get_frame().set_alpha(0.5)
+        ax.add_artist( at )
+        fig4.autofmt_xdate()
+        print("showing histogram of fixed values")
+        plt.show()
 
     # replot both raw and fixed data together
     if len(valueFixedL):

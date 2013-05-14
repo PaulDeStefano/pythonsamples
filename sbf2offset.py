@@ -65,9 +65,11 @@ def doStuff(f) :
         timeScale=block['Timescale']
         if timeScale == 1:
             # GNSS timestamps on SBF blocks
+            #print("DEBUG: SBF block uses GNSS timescale")
             epochDiffNow = float( GNSSepochInUNIXepoch - leapSecSince1972 )
         elif timescale == 2:
             # UTC timestamps on SBF blocks
+            #print("DEBUG: SBF block uses UTC timescale")
             epochDiffNow = float( GNSSepochInUNIXepoch )
         else:
             raise Exception('ERROR: SBF block timescale unrecognized: {}'.format(timeScale) )
