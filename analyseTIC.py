@@ -89,14 +89,14 @@ def doXPPSCorrections(dataSet):
             # failure
             raise Exception("could not find value in offsetDB: "+str(unixt))
         # apply offset
-        valFixed=(val + coeff*offsetVal/(1e09))
+        valFixed=(val + coeff*offsetVal)
         valueFixedL.append(valFixed)
         offsetL.append(offsetVal)
         #print 'DEBUG: val:{} offset:{} fixed:{}'.format(val,offsetVal,valFixed)
         #print "DEBUG: success"
 
     #logMsg("DEBUG: doXPPS: "+str(type(offsetL)) )
-    return valueFixedL, offsetL
+    return ( valueFixedL, offsetL )
 
 def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLine=True, subMean=True, units=''):
 
@@ -154,17 +154,17 @@ def prepFigure(host=None, xyT=None) :
         xSeries , ySeries , label , mean , stddev, units = xy
         compatCount = 0
         for r in tolRangeL:
-            logMsg("DEBUG: prepFigure: ",mean, r[0], r[1] , r[2], r[3] )
+            #logMsg("DEBUG: prepFigure: ",mean, r[0], r[1] , r[2], r[3] )
             if ( mean <= r[0] and mean >= r[1] and stddev < r[2] and stddev > r[3] ) :
                 # then at least one other range is compatible
                 compatCount += 1
         if compatCount < 2:
             # only 1 compatible axis, must be it's own.  we need a separate axis for it.
-            logMsg("DEBUG: prepFigure: found new independent data set")
+            #logMsg("DEBUG: prepFigure: found new independent data set")
             need += 1
             if need > len(axesList) :
                 # need count too high, create a new axis
-                logMsg("DEBUG: prepFigure: added new axis")
+                #logMsg("DEBUG: prepFigure: added new axis")
                 axesList.append( host.twinx() )
 
     return axesList
@@ -177,57 +177,48 @@ def plotDateHelper(title="no title",xyList=None):
     # pull the first data set
     xyT = xyList[0]
     xSeries , ySeries , mainLabel , mean , stddev , units = xyT
-    logMsg("DEBUG: plotDataHelper: mainLabel: ",mainLabel)
-    logMsg("DEBUG: plotDataHelper: mean: ",mean)
+    #logMsg("DEBUG: plotDataHelper: mainLabel: ",mainLabel)
+    #logMsg("DEBUG: plotDataHelper: mean: ",mean)
 
     startasc = time.asctime(xSeries[0])
     endasc = time.asctime(xSeries[len(xSeries)-1])
 
     # start plot
-    #fig1 = plt.figure()
-    #host = host_subplot(111, axes_class=AA.Axes)
     host = host_subplot(111)
-    #plt.xticks(rotation=30)
-    #plt.setp(host.xaxis.get_majorticklabels(), rotation=30, xdate=True)
-    #ax = fig1.add_subplot(1,1,1)
-    #plt.subplots_adjust(right=0.75)
     axisL = prepFigure(host,xyList)
 
     for xy, axx , fmt in zip( xyList , axisL , ['bo','go','yo'] ):
         # for each pair of x and y series
         # pull out x and y
         xSeries , ySeries , label , mean, stddev , units = xy
-        logMsg("DEBUG: plotDataHelper: adding data labeled: "+label)
+        #logMsg("DEBUG: plotDataHelper: adding data labeled: "+label)
         # plot on date axis
         plotDateOnAxis(axis=axx, x=xSeries,y=ySeries, label=label , subMean=False, fmt=fmt, units=units)
 
     host.set_xlabel("Time: "+startasc+" - "+endasc)
     host.set_title(title)
-    #fig1.autofmt_xdate()
     plt.setp(host.xaxis.get_majorticklabels(), rotation=30)
     plt.legend().get_frame().set_alpha(0.8)
     plt.draw()
-    logMsg("DEBUG: plotDataHelper: showing values")
+    print("Showing values: "+title)
     plt.show()
     
     # histograms
     for xy in xyList:
         fig2 = plt.figure()
         xSeries , ySeries , label , mean, stddev, units = xy
-        # plot on date axis
+        logMsg("DEBUG: plotDataHelper: hist: label: "+label,mean,stddev)
         # plot histogram of values series
         ax = fig2.add_subplot(111, yscale='log')
         n, bins, patches = ax.hist( ySeries, numBins , label=label)
-        #hist, binEdges = np.histogram( ySeries, numBins)
-        #print hist
-        #print n, bins, patches
         ax.set_xlabel(str(numBins)+" bins of "+label+' ('+units+')')
         ax.set_ylabel("Counts in bin")
-        #ax.legend()
-        # legend.get_frame().set_alpha(0.92)
-        fig2.suptitle("Histogram of "+label)
-        print("showing histogram of values")
+        extraText = r' $\sigma$'+'={0:.2G}'.format(stddev)
+        extraText += r',$\mu$'+'={0:.2G}'.format(mean)
+        fig2.suptitle("Histogram of "+label+extraText)
+        print("Showing histogram of values:"+label+extraText)
         plt.show()
+        del(fig2)
 
 
 def analyseSet(dataSet,label='label',title="title", units=''):
@@ -273,11 +264,10 @@ def analyseSet(dataSet,label='label',title="title", units=''):
                 raise Exception('XPPSOffset values NOT loaded!',len(offsetDB))
 
         # perform xPPSOffset corrections
-        valueFixedL , offsetL = doXPPSCorrections( dataSet )
+        ( valueFixedL , offsetL ) = doXPPSCorrections( dataSet )
         # show data with offset to compare
-        logMsg("DEBUG: analyse: valueFixedL:"+str(len(valueFixedL)) )
-        logMsg("DEBUG: analyse: offsetL:"+str(len(offsetL)) )
-
+        #logMsg("DEBUG: analyse: valueFixedL:"+str(len(valueFixedL)) )
+        #logMsg("DEBUG: analyse: offsetL:"+str(len(offsetL)) )
         offsetXYtuple = (timeL,offsetL,'xPPSoffset', np.mean(offsetL),np.std(offsetL), 'ns')
         xyList = [ xyTuple, offsetXYtuple ]
         plotDateHelper(title=title, xyList=xyList)
@@ -287,8 +277,8 @@ def analyseSet(dataSet,label='label',title="title", units=''):
         stddevFixed = np.std(valueFixedL)
         print "adjusted mean:", meanFixed
         print "adjusted stddev:", stddevFixed
-        offsetXYtuple = (timeL, valueFixedL,'xPPSoffset', meanFixed , stddevFixed, 'ns')
-        xyList = [ xyTuple, offsetXYtuple ]
+        offsetXYtuple = (timeL, valueFixedL,'adjusted dT', meanFixed , stddevFixed, 'ns')
+        xyList = [ offsetXYtuple ]
         plotDateHelper(title=title, xyList=xyList )
 
 def doStuff() :
