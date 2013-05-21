@@ -18,40 +18,19 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 import csv
+import sys
 import numpy as np
 import matplotlib
 from matplotlib import rc
 #matplotlib.use('svg')
 import matplotlib.pyplot as plt
 from matplotlib.offsetbox import AnchoredOffsetbox, TextArea
-from array import array
+from mpl_toolkits.axes_grid1 import host_subplot
+import mpl_toolkits.axisartist as AA
 import time
-import datetime
+from datetime import datetime
 from calendar import timegm
 import argparse
-
-rc('text',usetex=True)
-#rc('font',family='serif')
-
-parser = argparse.ArgumentParser(description='Find breaks in TIC data and analyse.')
-parser.add_argument('fileList', nargs='+', help='TIC data files')
-parser.add_argument('--desc', nargs='?', help='Description (title) for plots', default='DEFAULT DESCRIPTION')
-parser.add_argument('-g', '--gap', nargs='?', default='3', help='Maximum gap/tolerance (s) between epochs')
-parser.add_argument('--offsets', nargs='?', help='File continating xPPSoffset values (from sbf2offset.py)')
-parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='Boolean.  Add offset values to TIC measurements (dT)')
-parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='Boolean. Subtract offset values from TIC measurements (dT)')
-parser.add_argument('--histbins', nargs='?', default=100, help='Number of bins in histograms')
-args = parser.parse_args()
-inputFiles = args.fileList
-description = args.desc
-maxEpochGap = float(args.gap)
-offsetFile = args.offsets
-negOffset = args.negOffset
-numBins = args.histbins
-#print("DEBUG: negOffset:" + str(negOffset) )
-
-# xPPSoffset data
-offsetDB = []
 
 class AnchoredText( AnchoredOffsetbox ):
     def __init__(self, s, loc, pad=0.4, borderpad=0.5, prop=None, frameon=True):
@@ -62,13 +41,23 @@ class AnchoredText( AnchoredOffsetbox ):
                                             prop=prop,
                                             frameon=frameon)
 
+def logMsg(s, *args):
+    #print("DEBUG: logMsg called")
+    if args:
+        for a in args:
+            s += (" "+str(a))
+    print >> sys.stderr , str(s)
+
 def doXPPSCorrections(dataSet):
     """ Apply xPPSOffset values to the given (TIC) data set
+
+        returns [ list of corrections , list of matching offsets ]
     """
     global offsetDB
     global negOffset
     #print "DEBUG: offsetDB is" , len(offsetDB)
     valueFixedL = []
+    offsetL = []
 
     unixtList = list(offsetDB['unixtime'])
     offsetList = list(offsetDB['offset'])
@@ -101,12 +90,149 @@ def doXPPSCorrections(dataSet):
         # apply offset
         valFixed=(val + coeff*offsetVal/(1e09))
         valueFixedL.append(valFixed)
+        offsetL.append(offsetVal)
         #print 'DEBUG: val:{} offset:{} fixed:{}'.format(val,offsetVal,valFixed)
         #print "DEBUG: success"
 
-    return valueFixedL
+    #logMsg("DEBUG: doXPPS: "+str(type(offsetL)) )
+    return valueFixedL, offsetL
 
-def analyseSet(dataSet,label='lable',title="title"):
+def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='o', stddevLine=True, subMean=True):
+
+        if not axis:
+            raise Exception("ERROR: no axis for plotting")
+        if x == None or y == None:
+            raise Exception("ERROR: no data to plot")
+
+
+        mean = np.mean(y)
+        stddev = np.std(y)
+        extraText = r'$\sigma$'+'={0:.2G}'.format(stddev)
+        label += ' '+extraText
+        x = [ matplotlib.dates.date2num( datetime.utcfromtimestamp( timegm(t) ) ) for t in x ]
+        if subMean:
+            y = [ (d - mean) for d in y ]
+        obj = axis.plot_date( x, y, fmt , xdate=True, ydate=False , label=label, tz='UTC')
+        c = obj[0].get_color()
+
+        # beautify
+        axis.set_ylabel(label)
+        #ax.text(0.8,0.8,r'$\pi this is a test$',transform = ax.transAxes)
+        # legend.get_frame().set_alpha(0.5)
+        #at = AnchoredText(extraText, loc=1, frameon=True)
+        #axis.add_artist( at )
+
+        if subMean:
+            ylineH = stddev/2
+            ylineL = -stddev/2
+        else:
+            ylineH = mean + stddev
+            ylineL = mean - stddev
+        if stddevLine:
+            axis.axhline(y=ylineH, alpha=0.5, color=c)
+            axis.axhline(y=ylineL, alpha=0.5, color=c)
+
+def prepFigure(host=None, xyT=None) :
+    """ Check sets of data for compatibility on a single plot
+        Return a list of "parasite" axes
+    """
+    if xyT == None:
+        raise Exception("ERROR: prepFigure: no data to plot")
+
+    # start with just the host figure
+    axesList = [ host ]
+
+    tolRangeL = []
+    for xy in xyT:
+        # for each data set, define a tolerance range
+        xSeries , ySeries , label , mean , stddev = xy
+        tolRangeL.append( [mean+(3*stddev) ,mean-(3*stddev), stddev*5, stddev*0.5 ] )
+
+    # assume we don't need any axes, to start
+    need = 0
+    for xy in xyT:
+        # for each data set, see how many compatible ranges exist
+        xSeries , ySeries , label , mean , stddev = xy
+        compatCount = 0
+        for r in tolRangeL:
+            logMsg("DEBUG: prepFigure: ",mean, r[0], r[1] , r[2], r[3] )
+            if ( mean <= r[0] and mean >= r[1] and stddev < r[2] and stddev > r[3] ) :
+                # then at least one other range is compatible
+                compatCount += 1
+        if compatCount < 2:
+            # only 1 compatible axis, must be it's own.  we need a separate axis for it.
+            logMsg("DEBUG: prepFigure: found new independent data set")
+            need += 1
+            if need > len(axesList) :
+                # need count too high, create a new axis
+                logMsg("DEBUG: prepFigure: added new axis")
+                axesList.append( host.twinx() )
+
+    return axesList
+
+def plotDateHelper(title="no title",xyList=None):
+    global numBins
+    if xyList == None:
+        raise Exception("ERROR: no data to plot")
+
+    # pull the first data set
+    xyT = xyList[0]
+    xSeries , ySeries , mainLabel , mean , stddev = xyT
+    logMsg("DEBUG: plotDataHelper: mainLabel: ",mainLabel)
+    logMsg("DEBUG: plotDataHelper: mean: ",mean)
+
+    startasc = time.asctime(xSeries[0])
+    endasc = time.asctime(xSeries[len(xSeries)-1])
+
+    # start plot
+    #fig1 = plt.figure()
+    #ax = fig1.add_subplot(1,1,1)
+    host = host_subplot(111, axes_class=AA.Axes)
+    plt.subplots_adjust(right=0.75)
+    axisL = prepFigure(host,xyList)
+
+    for xy, ax in zip( xyList , axisL ):
+        # for each pair of x and y series
+        # pull out x and y
+        xSeries , ySeries , label , mean, stddev = xy
+        logMsg("DEBUG: plotDataHelper: adding data labeled: "+label)
+        # plot on date axis
+        plotDateOnAxis(axis=ax, x=xSeries,y=ySeries, label=label , subMean=False)
+
+    #axis.axis( ymin = -1 * stddev, ymax = 1*stddev)
+    #ax.set_ylabel(mainLabel+" - mean of "+str(mean)+" (s)")
+    host.set_ylabel(mainLabel)
+    host.set_xlabel("Time: "+startasc+" - "+endasc)
+    host.legend().get_frame().set_alpha(0.5)
+    #ax.autofmt_xdate()
+    #ax.suptitle(title)
+    #plt.figure().suptitle(title)
+    plt.setp(host.xaxis.get_majorticklabels(), rotation=30)
+    logMsg("DEBUG: plotDataHelper: showing values")
+    plt.show()
+    
+    # histograms
+    for xy in xyList:
+        fig2 = plt.figure()
+        xSeries , ySeries , label , mean, stddev = xy
+        # plot on date axis
+        # plot histogram of values series
+        ax = fig2.add_subplot(111, yscale='log')
+        n, bins, patches = ax.hist( ySeries, numBins , label=label)
+        #hist, binEdges = np.histogram( ySeries, numBins)
+        #print hist
+        #print n, bins, patches
+        ax.set_xlabel(str(numBins)+" bins of "+label)
+        ax.set_ylabel("Counts in bin")
+        #ax.legend()
+        # legend.get_frame().set_alpha(0.5)
+        fig2.autofmt_xdate()
+        fig2.suptitle("Histogram of "+label)
+        print("showing histogram of values")
+        plt.show()
+
+
+def analyseSet(dataSet,label='label',title="title"):
     global numBins, description, maxEpochGap
 
     # separate data into columns
@@ -115,6 +241,15 @@ def analyseSet(dataSet,label='lable',title="title"):
         timeL.append(t)
         valueL.append(val)
 
+    # stats
+    mean, stddev = None, None
+    mean = np.mean(valueL)
+    stddev = np.std(valueL)
+
+    xyTriple = [timeL,valueL,'dT (ns)']
+    xyTuple = ( timeL, valueL, 'dT (ns)', mean, stddev )
+    #logMsg("DEBUG: ", type(xyTriple) )
+
     # display epoch
     startasc = time.asctime(timeL[0])
     startUNIX = str( timegm(timeL[0]) )
@@ -122,131 +257,40 @@ def analyseSet(dataSet,label='lable',title="title"):
     endUNIX = str( timegm(timeL[len(timeL)-1]) )
     print 'epoch start: '+startasc+' '+startUNIX
     print 'epoch end  : '+endasc+' '+endUNIX
+    label = "Date "+startasc+" - "+endasc
 
-    # simple stats
-    mean = np.mean(valueL)
-    print "mean:", mean
-    #median = np.median(valueL)
-    #print "median:", median
-    stddev = np.std(valueL)
-    print "stddev:", stddev
-
-    # perform xPPSOffset corrections, if we have them
-    valueFixedL = []
-    if len(offsetDB):
-        valueFixedL = doXPPSCorrections( dataSet )
-        #print("DEBUG: "+repr(type(valueFixedL)) )
-    meanFixed = np.mean(valueFixedL)
-    stddevFixed = np.std(valueFixedL)
-        
     #print("DEBUG: length of values: {}".format(len(valueL)) )
     #print("DEBUG: length of fixed values: {}".format(len(valueFixedL)) )
 
-    # start plot
-    fig1 = plt.figure()
-    ax = fig1.add_subplot(1,1,1)
-    # plot data in this series (-mean)
-    x = [ matplotlib.dates.date2num( datetime.datetime.utcfromtimestamp( timegm(t) ) ) for t in timeL ]
-    y = [ (d - mean) for d in valueL ]
-    ax.plot_date( x, y, fmt='go' , xdate=True, ydate=False , label=label, tz='UTC')
-    extraText = r'$\sigma$'+'={0:.2G}'.format(stddev)
+    # basic plot
+    plotDateHelper(title=title,xyList=[ xyTuple ])
 
-    # beautify
-    ax.axes.set_title(title)
-    ax.set_xlabel("Time: "+startasc+' - '+endasc)
-    ax.set_ylabel(label+" - mean of "+str(mean)+" (s)")
-    at = AnchoredText(extraText, loc=1, frameon=True)
-    ax.add_artist( at )
-    #ax.text(0.8,0.8,r'$\pi this is a test$',transform = ax.transAxes)
-    #ax.legend()
-    # legend.get_frame().set_alpha(0.5)
-    fig1.autofmt_xdate()
-    print("showing plot of values")
-    plt.show()
+    if not len(offsetDB):
+        global offsetFile
+        if offsetFile:
+            # perform xPPSOffset corrections, if we have them
+            loadOffsets(offsetFile)
+            if not len(offsetDB):
+                raise Exception('XPPSOffset values NOT loaded!',len(offsetDB))
 
-    # plot histogram of values series
-    fig2 = plt.figure()
-    ax = fig2.add_subplot(1,1,1)
-    n, bins, patches = ax.hist( valueL, numBins , label=label)
-    #hist, binEdges = np.histogram( valueL, numBins)
-    #print hist
-    #print n, bins, patches
-    ax.axes.set_title("Histogram of "+title)
-    ax.set_xlabel(str(numBins)+" bins of "+label)
-    ax.set_ylabel("Counts")
-    #ax.legend()
-    # legend.get_frame().set_alpha(0.5)
-    ax.add_artist( at )
-    fig2.autofmt_xdate()
-    print("showing histogram of values")
-    plt.show()
+        # show data with offset to compare
+        valueFixedL , offsetL = doXPPSCorrections( dataSet )
+        logMsg("DEBUG: analyse: valueFixedL:"+str(len(valueFixedL)) )
+        logMsg("DEBUG: analyse: offsetL:"+str(len(offsetL)) )
+        xyList = [ xyTuple, [timeL,offsetL,'xPPSoffset', np.mean(offsetL),np.std(offsetL)] ]
+        plotDateHelper(title=title, xyList=xyList)
 
-    #  Plot offset corrected values
-    if len(valueFixedL):
-        fig3 = plt.figure()
-        ax = fig3.add_subplot(1,1,1)
+        # show applied offssets
+        meanFixed = np.mean(valueFixedL)
+        stddevFixed = np.std(valueFixedL)
         print "adjusted mean:", meanFixed
         print "adjusted stddev:", stddevFixed
-        y = [ (d - mean) for d in valueFixedL ]
-        extraText = r'$\sigma$'+'={0:.2G}'.format(stddevFixed)
-        ax.plot_date( x, y, fmt='bo' , xdate=True, ydate=False , label=label, tz='UTC')
-        ax.axes.set_title('(adjusted) '+title)
-        ax.set_xlabel("Time: "+startasc+' - '+endasc)
-        ax.set_ylabel(label+" (adjusted) - mean of "+str(mean)+" (s)")
-        #ax.legend()
-        # legend.get_frame().set_alpha(0.5)
-        at = AnchoredText(extraText, loc=1, frameon=True)
-        ax.add_artist( at )
-        fig3.autofmt_xdate()
-        print("showing plot of fixed values")
-        plt.show()
+        xyList = [ xyTuple, [timeL,valueFixedL,'xPPSoffset', np.mean(valueFixedL),np.std(valueFixedL)] ]
+        plotDateHelper(title=title, xyList=xyList )
 
-        # plot histogram of values series
-        fig4 = plt.figure()
-        ax = fig4.add_subplot(1,1,1)
-        n, bins, patches = ax.hist( valueFixedL, numBins , label=label)
-        #hist, binEdges = np.histogram( valueL, numBins)
-        #print hist
-        #print n, bins, patches
-        ax.axes.set_title("(adjusted) Histogram of "+title)
-        ax.set_xlabel(str(numBins)+" bins of "+label)
-        ax.set_ylabel("Counts")
-        #ax.legend()
-        # legend.get_frame().set_alpha(0.5)
-        ax.add_artist( at )
-        fig4.autofmt_xdate()
-        print("showing histogram of fixed values")
-        plt.show()
-
-    # replot both raw and fixed data together
-    if len(valueFixedL):
-        fig1 = plt.figure()
-        ax = fig1.add_subplot(1,1,1)
-        y = [ (d - mean) for d in valueL ]
-        extraText = '('+r'$\sigma$'+'={0:.2G}'.format(stddev)+')'
-        ax.plot_date( x, y, fmt='go' , xdate=True, ydate=False , label=label+" "+extraText, tz='UTC')
-        y = [ (d - mean) for d in valueFixedL ]
-        extraText = '('+r'$\sigma$'+'={0:.2G}'.format(stddevFixed)+')'
-        ax.plot_date( x, y, fmt='bo' , xdate=True, ydate=False , label="adjusted "+label+" "+extraText, tz='UTC')
-        ax.axes.set_title(title)
-        ax.set_xlabel("Time: "+startasc+' - '+endasc)
-        ax.set_ylabel(label+" (adjusted) - mean of "+str(mean)+" (s)")
-        leg = ax.legend()
-        leg.get_frame().set_alpha(0.7)
-        fig1.autofmt_xdate()
-        print("overploting fixed values")
-        plt.show()
-
-    # replot histogram within range limited to 7 stddev of mean
-    #n, bins, patches = plt.hist( valueL, 100, range=[mean-6*stddev,mean+6*stddev] , label=label)
-    #plt.plot( x, y, 'bo' )
-    #plt.legend()
-    #print("showing limited histogram of dT")
-    #plt.show()
-
-    
 def doStuff() :
-    
+    global inputFiles
+
     goodCount = 0
     lineCount = 0
     limit = 10000000
@@ -256,7 +300,7 @@ def doStuff() :
     dataBuffer = []
     ssList = []
     ssLimit = bufLimit
-    prevTime = 0
+    prevTime = None
     good = True
     for f in inputFiles:
         print "NOTICE: working on file: " + f
@@ -268,14 +312,17 @@ def doStuff() :
             date = fields[0]
             hms = fields[1]
             delta = fields[2]
-            if len(fields) == 4 :
-                unixtime = fields[3]
-            deltaTime = time.strptime(date+' '+hms+' UTC', "%Y/%m/%d %H:%M:%S %Z")
-            if deltaTime < prevTime :
+            if len(fields) > 3 :
+                unixtime = float(fields[3])
+                deltaTime = datetime.utcfromtimestamp(unixtime).timetuple()
+            else:
+                deltaTime = time.strptime(date+' '+hms+' UTC', "%Y/%m/%d %H:%M:%S %Z")
+            #logMsg("DEBUG: doStuff: time spec:", type(deltaTime))
+            if prevTime and deltaTime < prevTime :
                 raise Exception("time went backward, out of order or error?")
             # convert to high precision float
             #delta = np.float64(delta)
-            delta = float(delta)
+            delta = float(delta)/10**-9
             data = [ deltaTime , delta ]
             #print repr(data)
             #print repr(delta)
@@ -384,7 +431,10 @@ def loadOffsets(file):
 
     print("NOTICE: trying to import offset data...")
     with open(file,'r') as fh:
-        offsetDB = np.loadtxt(fh,dtype={'names': ('asctime','offset','unixtime'), 'formats':('S19',np.float64,np.float64)}, delimiter=',')
+        offsetDB = np.loadtxt(fh
+                ,dtype={'names': ('asctime','offset','unixtime')
+                ,'formats':('S19',np.float64,np.float64)}
+                , delimiter=',')
         #print("DEBUG: " + str(offsetDB.shape) )
         #print("DEBUG: " + str(offsetDB) )
         #print("DEBUG: " + str(offsetDB.dtype) )
@@ -395,10 +445,31 @@ def loadOffsets(file):
     #print("DEBUG: imported {} offset values".format(len(offsetDB)) )
     print("NOTICE: ...done ")
 
+
 ## MAIN ##
 #print "DEBUG: input files:" + repr(inputFiles)
-if offsetFile:
-    loadOffsets(offsetFile)
-    if not len(offsetDB):
-        raise Exception('XPPSOffset values NOT loaded!',len(offsetDB))
-doStuff()
+rc('text',usetex=True)
+#rc('font',family='serif')
+
+parser = argparse.ArgumentParser(description='Find breaks in TIC data and analyse.')
+parser.add_argument('fileList', nargs='+', help='TIC data files')
+parser.add_argument('--desc', nargs='?', help='Description (title) for plots', default='DEFAULT DESCRIPTION')
+parser.add_argument('-g', '--gap', nargs='?', default='3', help='Maximum gap/tolerance (s) between epochs')
+parser.add_argument('--offsets', nargs='?', help='File continating xPPSoffset values (from sbf2offset.py)')
+parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='Boolean.  Add offset values to TIC measurements (dT)')
+parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='Boolean. Subtract offset values from TIC measurements (dT)')
+parser.add_argument('--histbins', nargs='?', default=100, help='Number of bins in histograms')
+args = parser.parse_args()
+inputFiles = args.fileList
+description = args.desc
+maxEpochGap = float(args.gap)
+offsetFile = args.offsets
+negOffset = args.negOffset
+numBins = args.histbins
+#print("DEBUG: negOffset:" + str(negOffset) )
+
+# xPPSoffset data
+offsetDB = []
+
+if __name__ == "__main__" :
+    doStuff()
