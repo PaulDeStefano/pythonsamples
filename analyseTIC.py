@@ -125,8 +125,8 @@ def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLi
             ylineH = stddev/2
             ylineL = -stddev/2
         else:
-            ylineH = mean + stddev
-            ylineL = mean - stddev
+            ylineH = mean + stddev/2
+            ylineL = mean - stddev/2
         if stddevLine:
             axis.axhline(y=ylineH, alpha=0.5, color=c)
             axis.axhline(y=ylineL, alpha=0.5, color=c)
@@ -283,6 +283,7 @@ def analyseSet(dataSet,label='label',title="title", units=''):
 
 def doStuff() :
     global inputFiles
+    global shiftOffset
 
     goodCount = 0
     lineCount = 0
@@ -305,10 +306,12 @@ def doStuff() :
             date = fields[0]
             hms = fields[1]
             delta = fields[2]
-            if len(fields) > 3 :
+            if len(fields) >= 4 :
                 unixtime = float(fields[3])
                 deltaTime = datetime.utcfromtimestamp(unixtime).timetuple()
             else:
+                if not shiftOffset == float(0):
+                    raise Exception("ERROR: cannot apply time shift to xPPSoffset data without unixtime in field #4")
                 deltaTime = time.strptime(date+' '+hms+' UTC', "%Y/%m/%d %H:%M:%S %Z")
             #logMsg("DEBUG: doStuff: time spec:", type(deltaTime))
             if prevTime and deltaTime < prevTime :
@@ -421,12 +424,14 @@ def loadOffsets(file):
         This matches sbf2offset.py output format
     """
     global offsetDB
+    global shiftOffset
 
     print("NOTICE: trying to import offset data...")
     with open(file,'r') as fh:
         offsetDB = np.loadtxt(fh
-                ,dtype={'names': ('asctime','offset','unixtime')
-                ,'formats':('S19',np.float64,np.float64)}
+                , dtype={'names': ('asctime','offset','unixtime')
+                , 'formats':('S19',np.float64,np.float64)}
+                , converters={2: lambda u: np.float64(u)+shiftOffset }
                 , delimiter=',')
         #print("DEBUG: " + str(offsetDB.shape) )
         #print("DEBUG: " + str(offsetDB) )
@@ -435,6 +440,7 @@ def loadOffsets(file):
         #print("DEBUG: " + str(offsetDB['offset']) )
         #i = list(offsetDB['unixtime']).index(1365551993)
         #print offsetDB[i]['offset']
+    #logMsg("DEBUG: loadOffsets: first value: ",offsetDB[0]['offset'],"at: ",offsetDB[0]['asctime'])
     #print("DEBUG: imported {} offset values".format(len(offsetDB)) )
     print("NOTICE: ...done ")
 
@@ -452,6 +458,7 @@ parser.add_argument('--offsets', nargs='?', help='File continating xPPSoffset va
 parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='Boolean.  Add offset values to TIC measurements (dT)')
 parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='Boolean. Subtract offset values from TIC measurements (dT)')
 parser.add_argument('--histbins', nargs='?', default=100, help='Number of bins in histograms')
+parser.add_argument('--shiftOffset', '-s', nargs='?', default=0.0, help='shift time of xPPSOffset corrections wrt. TIC measurements by this many seconds')
 args = parser.parse_args()
 inputFiles = args.fileList
 description = args.desc
@@ -459,6 +466,7 @@ maxEpochGap = float(args.gap)
 offsetFile = args.offsets
 negOffset = args.negOffset
 numBins = args.histbins
+shiftOffset = float(args.shiftOffset)
 #print("DEBUG: negOffset:" + str(negOffset) )
 
 # xPPSoffset data
