@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 from matplotlib.offsetbox import AnchoredOffsetbox, TextArea
 from mpl_toolkits.axes_grid1 import host_subplot
 import mpl_toolkits.axisartist as AA
+import matplotlib.ticker as ticker
 import time
 from datetime import datetime
 from calendar import timegm
@@ -97,7 +98,7 @@ def doXPPSCorrections(dataSet):
     #logMsg("DEBUG: doXPPS: "+str(type(offsetL)) )
     return valueFixedL, offsetL
 
-def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='o', stddevLine=True, subMean=True):
+def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLine=True, subMean=True, units=''):
 
         if not axis:
             raise Exception("ERROR: no axis for plotting")
@@ -107,18 +108,16 @@ def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='o', stddevL
 
         mean = np.mean(y)
         stddev = np.std(y)
-        extraText = r'$\sigma$'+'={0:.2G}'.format(stddev)
-        label += ' '+extraText
+        extraText = r' $\sigma$'+'={0:.2G}'.format(stddev)
         x = [ matplotlib.dates.date2num( datetime.utcfromtimestamp( timegm(t) ) ) for t in x ]
         if subMean:
             y = [ (d - mean) for d in y ]
-        obj = axis.plot_date( x, y, fmt , xdate=True, ydate=False , label=label, tz='UTC')
+        obj = axis.plot_date( x, y, fmt , xdate=True, ydate=False , label=label+extraText, tz='UTC')
         c = obj[0].get_color()
 
         # beautify
-        axis.set_ylabel(label)
+        axis.set_ylabel(label+' ('+units+')')
         #ax.text(0.8,0.8,r'$\pi this is a test$',transform = ax.transAxes)
-        # legend.get_frame().set_alpha(0.5)
         #at = AnchoredText(extraText, loc=1, frameon=True)
         #axis.add_artist( at )
 
@@ -145,14 +144,14 @@ def prepFigure(host=None, xyT=None) :
     tolRangeL = []
     for xy in xyT:
         # for each data set, define a tolerance range
-        xSeries , ySeries , label , mean , stddev = xy
+        xSeries , ySeries , label , mean , stddev , units = xy
         tolRangeL.append( [mean+(3*stddev) ,mean-(3*stddev), stddev*5, stddev*0.5 ] )
 
     # assume we don't need any axes, to start
     need = 0
     for xy in xyT:
         # for each data set, see how many compatible ranges exist
-        xSeries , ySeries , label , mean , stddev = xy
+        xSeries , ySeries , label , mean , stddev, units = xy
         compatCount = 0
         for r in tolRangeL:
             logMsg("DEBUG: prepFigure: ",mean, r[0], r[1] , r[2], r[3] )
@@ -177,7 +176,7 @@ def plotDateHelper(title="no title",xyList=None):
 
     # pull the first data set
     xyT = xyList[0]
-    xSeries , ySeries , mainLabel , mean , stddev = xyT
+    xSeries , ySeries , mainLabel , mean , stddev , units = xyT
     logMsg("DEBUG: plotDataHelper: mainLabel: ",mainLabel)
     logMsg("DEBUG: plotDataHelper: mean: ",mean)
 
@@ -186,35 +185,35 @@ def plotDateHelper(title="no title",xyList=None):
 
     # start plot
     #fig1 = plt.figure()
+    #host = host_subplot(111, axes_class=AA.Axes)
+    host = host_subplot(111)
+    #plt.xticks(rotation=30)
+    #plt.setp(host.xaxis.get_majorticklabels(), rotation=30, xdate=True)
     #ax = fig1.add_subplot(1,1,1)
-    host = host_subplot(111, axes_class=AA.Axes)
-    plt.subplots_adjust(right=0.75)
+    #plt.subplots_adjust(right=0.75)
     axisL = prepFigure(host,xyList)
 
-    for xy, ax in zip( xyList , axisL ):
+    for xy, axx , fmt in zip( xyList , axisL , ['bo','go','yo'] ):
         # for each pair of x and y series
         # pull out x and y
-        xSeries , ySeries , label , mean, stddev = xy
+        xSeries , ySeries , label , mean, stddev , units = xy
         logMsg("DEBUG: plotDataHelper: adding data labeled: "+label)
         # plot on date axis
-        plotDateOnAxis(axis=ax, x=xSeries,y=ySeries, label=label , subMean=False)
+        plotDateOnAxis(axis=axx, x=xSeries,y=ySeries, label=label , subMean=False, fmt=fmt, units=units)
 
-    #axis.axis( ymin = -1 * stddev, ymax = 1*stddev)
-    #ax.set_ylabel(mainLabel+" - mean of "+str(mean)+" (s)")
-    host.set_ylabel(mainLabel)
     host.set_xlabel("Time: "+startasc+" - "+endasc)
-    host.legend().get_frame().set_alpha(0.5)
-    #ax.autofmt_xdate()
-    #ax.suptitle(title)
-    #plt.figure().suptitle(title)
+    host.set_title(title)
+    #fig1.autofmt_xdate()
     plt.setp(host.xaxis.get_majorticklabels(), rotation=30)
+    plt.legend().get_frame().set_alpha(0.8)
+    plt.draw()
     logMsg("DEBUG: plotDataHelper: showing values")
     plt.show()
     
     # histograms
     for xy in xyList:
         fig2 = plt.figure()
-        xSeries , ySeries , label , mean, stddev = xy
+        xSeries , ySeries , label , mean, stddev, units = xy
         # plot on date axis
         # plot histogram of values series
         ax = fig2.add_subplot(111, yscale='log')
@@ -222,17 +221,16 @@ def plotDateHelper(title="no title",xyList=None):
         #hist, binEdges = np.histogram( ySeries, numBins)
         #print hist
         #print n, bins, patches
-        ax.set_xlabel(str(numBins)+" bins of "+label)
+        ax.set_xlabel(str(numBins)+" bins of "+label+' ('+units+')')
         ax.set_ylabel("Counts in bin")
         #ax.legend()
-        # legend.get_frame().set_alpha(0.5)
-        fig2.autofmt_xdate()
+        # legend.get_frame().set_alpha(0.92)
         fig2.suptitle("Histogram of "+label)
         print("showing histogram of values")
         plt.show()
 
 
-def analyseSet(dataSet,label='label',title="title"):
+def analyseSet(dataSet,label='label',title="title", units=''):
     global numBins, description, maxEpochGap
 
     # separate data into columns
@@ -246,8 +244,8 @@ def analyseSet(dataSet,label='label',title="title"):
     mean = np.mean(valueL)
     stddev = np.std(valueL)
 
-    xyTriple = [timeL,valueL,'dT (ns)']
-    xyTuple = ( timeL, valueL, 'dT (ns)', mean, stddev )
+    xyTriple = [timeL,valueL, label]
+    xyTuple = ( timeL, valueL, label, mean, stddev , units )
     #logMsg("DEBUG: ", type(xyTriple) )
 
     # display epoch
@@ -257,7 +255,6 @@ def analyseSet(dataSet,label='label',title="title"):
     endUNIX = str( timegm(timeL[len(timeL)-1]) )
     print 'epoch start: '+startasc+' '+startUNIX
     print 'epoch end  : '+endasc+' '+endUNIX
-    label = "Date "+startasc+" - "+endasc
 
     #print("DEBUG: length of values: {}".format(len(valueL)) )
     #print("DEBUG: length of fixed values: {}".format(len(valueFixedL)) )
@@ -266,18 +263,23 @@ def analyseSet(dataSet,label='label',title="title"):
     plotDateHelper(title=title,xyList=[ xyTuple ])
 
     if not len(offsetDB):
+        # if we haven't the offset data loaded, already, check to see
+        # if we can load it from a file
         global offsetFile
         if offsetFile:
-            # perform xPPSOffset corrections, if we have them
+            # we can load it, so try
             loadOffsets(offsetFile)
             if not len(offsetDB):
                 raise Exception('XPPSOffset values NOT loaded!',len(offsetDB))
 
-        # show data with offset to compare
+        # perform xPPSOffset corrections
         valueFixedL , offsetL = doXPPSCorrections( dataSet )
+        # show data with offset to compare
         logMsg("DEBUG: analyse: valueFixedL:"+str(len(valueFixedL)) )
         logMsg("DEBUG: analyse: offsetL:"+str(len(offsetL)) )
-        xyList = [ xyTuple, [timeL,offsetL,'xPPSoffset', np.mean(offsetL),np.std(offsetL)] ]
+
+        offsetXYtuple = (timeL,offsetL,'xPPSoffset', np.mean(offsetL),np.std(offsetL), 'ns')
+        xyList = [ xyTuple, offsetXYtuple ]
         plotDateHelper(title=title, xyList=xyList)
 
         # show applied offssets
@@ -285,7 +287,8 @@ def analyseSet(dataSet,label='label',title="title"):
         stddevFixed = np.std(valueFixedL)
         print "adjusted mean:", meanFixed
         print "adjusted stddev:", stddevFixed
-        xyList = [ xyTuple, [timeL,valueFixedL,'xPPSoffset', np.mean(valueFixedL),np.std(valueFixedL)] ]
+        offsetXYtuple = (timeL, valueFixedL,'xPPSoffset', meanFixed , stddevFixed, 'ns')
+        xyList = [ xyTuple, offsetXYtuple ]
         plotDateHelper(title=title, xyList=xyList )
 
 def doStuff() :
@@ -416,9 +419,9 @@ def doStuff() :
         epochN = epochN +1
         print "Analysing epoch: " + str(epochN)
         print "Analysing original measurements"
-        analyseSet( dataSet , "dT", "dT: "+description )
+        analyseSet( dataSet , label='dT', title="dT: "+description, units='ns')
         print "Analysing first differences"
-        analyseSet( diffSet , "dT1-dT2" , "First Differences: "+description )
+        analyseSet( diffSet , "dT1-dT2" , "First Differences: "+description, units='ns' )
         print "...done"
 
 def loadOffsets(file):
