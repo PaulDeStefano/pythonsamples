@@ -215,7 +215,7 @@ def plotDateHelper(title="no title",xyList=None):
         ax.set_ylabel("Counts in bin")
         extraText = r' $\sigma$'+'={0:.2G}'.format(stddev)
         extraText += r',$\mu$'+'={0:.2G}'.format(mean)
-        fig2.suptitle("Histogram of "+label+extraText)
+        fig2.suptitle(title+" Histogram of"+label+extraText)
         print("Showing histogram of values:"+label+extraText)
         plt.show()
         del(fig2)
