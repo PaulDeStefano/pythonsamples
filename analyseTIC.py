@@ -263,6 +263,7 @@ def analyseSet(dataSet,label='label',title="title", units=''):
             if not len(offsetDB):
                 raise Exception('XPPSOffset values NOT loaded!',len(offsetDB))
 
+    if len(offsetDB):
         # perform xPPSOffset corrections
         ( valueFixedL , offsetL ) = doXPPSCorrections( dataSet )
         # show data with offset to compare
