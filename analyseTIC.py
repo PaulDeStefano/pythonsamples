@@ -215,7 +215,7 @@ def plotDateHelper(title="no title",xyList=None):
         ax.set_ylabel("Counts in bin")
         extraText = r' $\sigma$'+'={0:.2G}'.format(stddev)
         extraText += r',$\mu$'+'={0:.2G}'.format(mean)
-        fig2.suptitle(title+" Histogram of"+label+extraText)
+        fig2.suptitle(title+" Histogram of "+label+extraText)
         print("Showing histogram of values:"+label+extraText)
         plt.show()
         del(fig2)
@@ -425,6 +425,9 @@ def loadOffsets(file):
         This matches sbf2offset.py output format
     """
     global offsetDB
+    # TODO shiftOffset is applied to the time off the xPPSOffset values as they are imported
+    # it would be more accurate to apply this to the TIC measurements, as that
+    # time value is suspected to be the source of the uncertainty.
     global shiftOffset
 
     print("NOTICE: trying to import offset data...")
