@@ -300,20 +300,20 @@ def doStuff() :
     for f in inputFiles:
         print "NOTICE: working on file: " + f
         file = open(f)
-        for line in (csv.reader(file)):
-            #print line
-            #date, hms, delta , unixtime = list(line)
+        for line in (csv.reader(file,delimiter=' ')):
+            #iso8601, delta , unixtime = list(line)
             fields = list(line)
-            date = fields[0]
-            hms = fields[1]
-            delta = fields[2]
+            #logMsg(str(fields))
+            iso8601 = fields[0]
+            delta = fields[1]
+            nsec = fields[3]
             if len(fields) >= 4 :
-                unixtime = float(fields[3])
+                unixtime = float(fields[2])
                 deltaTime = datetime.utcfromtimestamp(unixtime).timetuple()
             else:
                 if not shiftOffset == float(0):
                     raise Exception("ERROR: cannot apply time shift to xPPSoffset data without unixtime in field #4")
-                deltaTime = time.strptime(date+' '+hms+' UTC', "%Y/%m/%d %H:%M:%S %Z")
+                deltaTime = time.strptime(iso8601+' UTC', "%Y-%m-%dT%H:%M:%S %Z")
             #logMsg("DEBUG: doStuff: time spec:", type(deltaTime))
             if prevTime and deltaTime < prevTime :
                 raise Exception("time went backward, out of order or error?")
