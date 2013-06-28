@@ -56,47 +56,72 @@ def doXPPSCorrections(dataSet):
     """
     global offsetDB
     global negOffset
-    #print "DEBUG: offsetDB is" , len(offsetDB)
     valueFixedL = []
     offsetL = []
+    timeFixedL = []
 
-    unixtList = list(offsetDB['unixtime'])
+    utOffsetList= sorted( list(offsetDB['unixtime']) )
     offsetList = list(offsetDB['offset'])
-    offsetDBlen = len(offsetDB)
+    offsetDBlen = len(offsetList)
+    dataSet.sort()
+    dataLen = len(dataSet)
     coeff = 1
     if negOffset:
         # reverse sign of correction if set (default)
         coeff = -1
 
-    # A brute-force search of the full correction series was taking a long time.
-    # We impliment a pointer than preserves the index of the last match, and prevents
-    # the next match from having to re-compare previous matches.
-    # This assumes both dataSet and offsetList are already nearly sorted.
-    lastIndex = 0
-    for t,val in dataSet:
-        unixt = timegm(t)
-        #print "DEBUG: searching for:",unixt
-        if lastIndex > 10 :
-            # backtrack a bit in case things are out of order slightly
-            lastIndex -= 9
-        while( lastIndex <= offsetDBlen-1 and not (unixt == unixtList[lastIndex]) ):
-            #print "DEBUG: unixttime:",unixtList[lastIndex]
-            lastIndex += 1
-        if( lastIndex <= offsetDBlen-1 ):
-            # success
-            offsetVal = offsetList[lastIndex]
-        else:
-            # failure
-            raise Exception("could not find value in offsetDB: "+str(unixt))
-        # apply offset
-        valFixed=(val + coeff*offsetVal)
-        valueFixedL.append(valFixed)
-        offsetL.append(offsetVal)
-        #print 'DEBUG: val:{} offset:{} fixed:{}'.format(val,offsetVal,valFixed)
-        #print "DEBUG: success"
+    print "Applying xPPSOffset Corrections..."
 
+    # TODO: make sure data set is sorted
+    """ 
+    Take the first time value from each list and find the corresponding index
+    in the other list.  Then, advace through both lists, checking equality,
+    and applying offset corrections to the raw data.
+    If the two times stop matching, the there is a discontinuity in the time
+    values in one or both lists.  Calculate the difference between the time of
+    the current index in each list with the previous element to see which list
+    has the missing data.
+    If it's the data set, it must be less than the allowed gap or else there is
+    an error.  Skip ahead in the offset list or generate an error.  If it is
+    the offset list that has a gap, skip ahead in the data list.
+    
+    """
+    offsetPtr = 0
+    dataPtr = 0
+    while( dataPtr <= dataLen -1 and offsetPtr <= offsetDBlen -1 ) :
+        # check where we are
+        tm = dataSet[dataPtr][0]
+        dataT = timegm( tm )
+        offsetT = utOffsetList[offsetPtr]
+        if ( offsetT == dataT ):
+            # it's working
+            val = dataSet[dataPtr][1]
+            offsetVal = offsetList[offsetPtr]
+            valFixed=(val + coeff*offsetVal)
+            valueFixedL.append(valFixed)
+            timeFixedL.append(tm)
+            offsetL.append(offsetVal)
+            dataPtr += 1
+            offsetPtr += 1
+        else :
+            while( dataT != offsetT ):
+                if( dataT < offsetT ):
+                    dataPtr += 1
+                else:
+                    offsetPtr += 1
+                if( dataPtr >= dataLen or offsetPtr >= offsetDBlen ):
+                    break
+                tm = dataSet[dataPtr][0]
+                dataT = timegm( tm )
+                offsetT = utOffsetList[offsetPtr]
+
+        #logMsg('DEBUG: val:{} offset:{} fixed:{}'.format(str(val),str(offsetVal),str(valFixed)))
+        #logMsg( "DEBUG: success")
+
+    print "...done"
     #logMsg("DEBUG: doXPPS: "+str(type(offsetL)) )
-    return ( valueFixedL, offsetL )
+    #logMsg("DEBUG: offsetList length: "+str(len(offsetL['offset'])) )
+    return ( valueFixedL, offsetL , timeFixedL )
 
 def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLine=True, subMean=True, units=''):
 
@@ -223,6 +248,7 @@ def plotDateHelper(title="no title",xyList=None):
 
 def analyseSet(dataSet,label='label',title="title", units=''):
     global numBins, description, maxEpochGap
+    global offsetDB, offsetFile
 
     # separate data into columns
     timeL , valueL = [],[]
@@ -256,20 +282,22 @@ def analyseSet(dataSet,label='label',title="title", units=''):
     if not len(offsetDB):
         # if we haven't the offset data loaded, already, check to see
         # if we can load it from a file
-        global offsetFile
         if offsetFile:
             # we can load it, so try
             loadOffsets(offsetFile)
+            #logMsg("DEBUG: analyseSet: ", str(offsetDB[...,0]) )
             if not len(offsetDB):
                 raise Exception('XPPSOffset values NOT loaded!',len(offsetDB))
 
     if len(offsetDB):
         # perform xPPSOffset corrections
-        ( valueFixedL , offsetL ) = doXPPSCorrections( dataSet )
+        ( valueFixedL , offsetL , timeFixedL ) = doXPPSCorrections( dataSet )
+        if(len(offsetL) == 0 ):
+            raise Exception("ERROR: failed to applay any offset corrections")
         # show data with offset to compare
-        #logMsg("DEBUG: analyse: valueFixedL:"+str(len(valueFixedL)) )
-        #logMsg("DEBUG: analyse: offsetL:"+str(len(offsetL)) )
-        offsetXYtuple = (timeL,offsetL,'xPPSoffset', np.mean(offsetL),np.std(offsetL), 'ns')
+        logMsg("DEBUG: analyse: valueFixedL len:",str(len(valueFixedL)) )
+        #logMsg("DEBUG: analyse: offsetL len:",str(len(offsetL)) )
+        offsetXYtuple = (timeFixedL,offsetL,'xPPSoffset', np.mean(offsetL),np.std(offsetL), 'ns')
         xyList = [ xyTuple, offsetXYtuple ]
         plotDateHelper(title=title, xyList=xyList)
 
@@ -278,7 +306,7 @@ def analyseSet(dataSet,label='label',title="title", units=''):
         stddevFixed = np.std(valueFixedL)
         print "adjusted mean:", meanFixed
         print "adjusted stddev:", stddevFixed
-        offsetXYtuple = (timeL, valueFixedL,'adjusted dT', meanFixed , stddevFixed, 'ns')
+        offsetXYtuple = (timeFixedL, valueFixedL,'adjusted dT', meanFixed , stddevFixed, 'ns')
         xyList = [ offsetXYtuple ]
         plotDateHelper(title=title, xyList=xyList )
 
@@ -288,7 +316,7 @@ def doStuff() :
 
     goodCount = 0
     lineCount = 0
-    limit = 10000000
+    limit = 100000000
     #limit = 1000000
     bufLimit = 10
     dataArray = []
@@ -421,7 +449,7 @@ def doStuff() :
 def loadOffsets(file):
     """ Retreive xPPSOffset values from file.
         Assumed format is
-                <ISO8601 date/time>,<offset>,<UNIXtime>
+                <ISO8601 date/time>,<offset>,<UNIXtime>,4,5,6,7,8
         This matches sbf2offset.py output format
     """
     global offsetDB
@@ -433,19 +461,11 @@ def loadOffsets(file):
     print("NOTICE: trying to import offset data...")
     with open(file,'r') as fh:
         offsetDB = np.loadtxt(fh
-                , dtype={'names': ('asctime','offset','unixtime')
-                , 'formats':('S19',np.float64,np.float64)}
-                , converters={2: lambda u: np.float64(u)+shiftOffset }
+                , dtype={'names': ('asctime','offset','unixtime','four','five','six','seven','eight')
+                , 'formats':('S19',np.float64,np.float64,'i4','i4','f4','f4','i4')}
+                , converters={2: lambda u: int(float(u))+shiftOffset }
                 , delimiter=',')
-        #print("DEBUG: " + str(offsetDB.shape) )
-        #print("DEBUG: " + str(offsetDB) )
-        #print("DEBUG: " + str(offsetDB.dtype) )
-        #print("DEBUG: " + str(offsetDB['unixtime']) )
-        #print("DEBUG: " + str(offsetDB['offset']) )
-        #i = list(offsetDB['unixtime']).index(1365551993)
-        #print offsetDB[i]['offset']
-    #logMsg("DEBUG: loadOffsets: first value: ",offsetDB[0]['offset'],"at: ",offsetDB[0]['asctime'])
-    #print("DEBUG: imported {} offset values".format(len(offsetDB)) )
+        #logMsg("DEBUG: loadOffsetdb: ",len(offsetDB['offset'])) 
     print("NOTICE: ...done ")
 
 
