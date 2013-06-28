@@ -59,14 +59,13 @@ class t2kSeptTime:
         if timeScale == 1:
             # GNSS timestamps on SBF blocks
             #print("DEBUG: SBF block uses GNSS timescale")
-            #epochDiffNow = float( GNSSepochInUNIXepoch - leapSecSince1972 )
-            epochDiffNow = float( GNSSepochInUNIXepoch )
+            epochDiffNow = float( GNSSepochInUNIXepoch - leapSecSince1972 )
         elif timeScale == 2:
             # UTC timestamps on SBF blocks
             #print("DEBUG: SBF block uses UTC timescale")
             raise Exception("SBF block uses UTC.  implimentation not yet verifyed.")
             #TODO : I had better check this.
-            epochDiffNow = float( GNSSepochInUNIXepoch + leapSecSince1972 )
+            epochDiffNow = float( GNSSepochInUNIXepoch )
         else:
             raise Exception('ERROR: SBF timescale unrecognized: {}'.format(timeScale) )
 
