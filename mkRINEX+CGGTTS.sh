@@ -4,30 +4,42 @@
 sbfTopDir="/home/t2k/public_html/post/gpsgroup/ptdata"
 recvList="PT00 PT01"
 pathGrps="GPSData_Internal GPSData_External"
-rinexTopDir="./rinex"
-cggTopDir="./cggtts"
+rinexTopDir="/home/pdestefa/public_html/organizedData/rinex"
+rinexDir='${rinexTopDir}/${id}/${element}'
+cggTopDir="/home/pdestefa/public_html/organizedData/cggtts"
 cggParam="paramCGGTTS.dat"
 sbf2rinProg="/usr/local/RxTools/bin/sbf2rin"
 rin2cggProg="/usr/local/RxTools/bin/rin2cgg"
+rinFileName='${id}${day}'
+sbf2offsetProg="/home/pdestefa/local/src/samples/sbf2offset.py"
+offsetTopDir="/home/pdestefa/public_html/organizedData/xPPSOffsets/"
+offsetDir='${offsetTopDir}/${id}/${element}'
+offsetFileName='xppsoffset.${id}.${type}.yr${yr}.day${day}.dat'
+sbfFileList="/tmp/sbfFileList"
+zProg="lzop"
+zExt=".lzop"
 erex=".13_"
 clobber="yes"
 rebuild="no"
+doRIN="no"
+doCGG="no"
+doOff="no"
+dryrun="no"
 
 function logMsg() {
     echo "$@" 1>&2
 }
 
 function getSBF() {
-    element=${1}
-    id=$2
-    extraRegex=${3}
+    local element=${1}
+    local id=$2
+    local extraRegex=${3}
     logMsg "NOTICE: working on element ${element}"
 
     # find SBF files
     ( /usr/bin/find -L ${sbfTopDir} \
-        -type f -name "*.??_" \
+        -type f -iwholename "*${element}*${id}*.??_*" \
         2>/dev/null \
-        | egrep -i "${element}.*${id}" \
         | egrep -i "${extraRegex}" \
         | sort \
     )
@@ -35,8 +47,8 @@ function getSBF() {
 }
 
 function mkRin() {
-    sbf=${1}
-    rin=${2}
+    local sbf=${1}
+    local rin=${2}
 
     if [ -z "${rin}" ]; then logMsg ERROR: need output name for RINEX data; exit 1; fi
     logMsg "NOTICE: processing SBF to RINEX data"
@@ -55,6 +67,8 @@ function mkCGG() {
     local prev=${1}
     local curr=${2}
     local id=${3}
+    local subDir=${4}
+    local type=${5}
     local prevName=${prev}
 
     # example PT001710.13O
@@ -74,7 +88,8 @@ function mkCGG() {
     esac
 
     # add day
-    dday=$( echo ${day} | sed -e 's/0*//' )
+    local dday=$( echo ${day} | sed -e 's/0*//' )
+    # calculate mjd for *yesterday*
     local mjd=$((${yrMJD} + ${dday} - 1 ))
 
     ln -s --force "${prev}" rinex_obs
@@ -95,7 +110,7 @@ function mkCGG() {
     #echo ${mjd} | ( ${rin2cggProg} 1> /dev/null 2>/dev/null )
     echo ${mjd} | ${rin2cggProg} >/dev/null
     if [[ $? -eq 0 && -f CGGTTS.log ]]; then
-        local cggFile="${cggTopDir}/${id}/${mjd}.cggtts"
+        local cggFile="${cggTopDir}/${id}/${subDir}/CGGTTS.${id}.${type}.yr${yr}.day${day}.mjd${mjd}"
         local cggStoreDir=$(dirname ${cggFile})
         if [ ! -d ${cggStoreDir} ]; then mkdir --parents ${cggStoreDir}; fi
         logMsg "NOTICE: ...Done"
@@ -109,9 +124,20 @@ function mkCGG() {
         exit 1
     fi
 
+    logMsg "NOTICE: compressing CGGTTS data..."
+    gzip -c ${cggFile}.gps >${cggFile}.gps.gz
+    logMsg "NOTICE: ...Done"
+
     rm rinex_*
     rm ${cggParam}
 
+}
+
+function mkOffset() {
+  local sbfFile="${1}"
+  local outputFile="${2}"
+
+  /usr/local/bin/python2.7 "${sbf2offsetProg}" "${sbfFile}" >"${outputFile}"
 }
 
 function processSBF() {
@@ -124,19 +150,45 @@ function processSBF() {
     for element in ${pathGrps}; do {
         currSBF="currSBF"
 
-        getSBF ${element} ${id} ${erex} \
-        | while read file; do {
+        getSBF ${element} ${id} ${erex} > "${sbfFileList}"
+        while read file; do {
+        if [[ "yes" = "${dryrun}" ]]; then logMsg "DRYRUN: SBF file: ${file}"; continue; fi
             logMsg "NOTICE: working on SBF file: ${file}"
+
             # parse filename
-            dir=$(dirname "${file}")
-            basename=$(basename "${file}")
-            currSBF="currSBF"
+            local dir=$(dirname "${file}")
+            local basename=$(basename "${file}")
+            currSBF="${basename%%.gz}"
             rinexFile="$( echo ${basename%_}O|tr '[:lower:]' '[:upper:]' )"
+            local type="int"
+            [[ ${element} =~ External ]] && type="ext"
 
-            if [[ -e ${currSBF} ]]; then rm ${currSBF}; fi
-            ln -s ${file} ${currSBF}
+            local values=$(echo ${basename}| sed 's/\(....\)\(...\).\.\(..\)./\1 \2 \3/')
+            if [[ -z ${values} ]]; then logMsg "ERROR: couldn't understand filename, ${basename}, as an SBF file"; exit 1 ; fi
+            set ${values}
+            local day=${2}
+            local yr=${3}
 
-            # run rin2sbf
+            if [[ ! -e ${currSBF} ]]; then {
+              if [[ ${file} =~ \\.gz ]]; then {
+                # file is gz compressed
+                gzip -dc "${file}" > "${currSBF}"
+              } else {
+                ln -s "${file}" "${currSBF}"
+              } fi
+            } fi 
+
+            # extract xPPSOffset data
+            logMsg "NOTICE: extracting xPPSOffset data"
+            eval local offsetfile="${offsetFileName}"
+            mkOffset "${currSBF}" "${offsetfile}"
+            eval local offsetFinalDir="${offsetDir}"
+            if [[ ! -d ${offsetFinalDir} ]]; then mkdir --parents ${offsetFinalDir}; fi
+            logMsg "DEBUG: moving offset data to ${offsetFinalDir}"
+            ${zProg} -c "${offsetfile}" >${offsetfile}.${zExt}
+            mv  "${offsetfile}.${zExt}" "${offsetFinalDir}"/.
+
+            # make RINEX
             currRINEX="${rinexFile}"
             if [[ ! -e "${currRINEX}" || "yes" = "${rebuild}" ]]; then {
                 mkRin ${currSBF} ${currRINEX}
@@ -146,20 +198,20 @@ function processSBF() {
 
             # make CGGTTS
             if [[ ! -z "${prevRINEX}" && -e "${prevRINEX}" ]]; then {
-               mkCGG ${prevRINEX} ${currRINEX} ${id}
+               mkCGG ${prevRINEX} ${currRINEX} ${id} ${element} ${day} ${yr} ${type}
             } fi
 
             # put RINEX file in organized location
             logMsg "NOTICE: compressing and storing RINEX data"
-            for file in ${rinexFile%O}*; do {
+            for rinfile in ${rinexFile%O}*; do {
                 echo -n . 1>&2
-                rinZ=${file}.gz
+                rinZ=${rinfile}.gz
                 eval rinStoreDir="${rinexTopDir}/${id}/${element}"
                 storeFile=${rinStoreDir}/${rinZ}
                 if [ ! -d ${rinStoreDir} ]; then mkdir --parents ${rinStoreDir}; fi
                 if [[ "yes" = "${clobber}" || ! -e ${storeFile} ]]; then {
-                    gzip <${file} >${rinZ}
-                    mv ${rinZ} ${storeFile}
+                    gzip -c ${rinfile} >${rinZ}
+                    mv  ${rinZ} ${storeFile}
                 } else {
                     logMsg "WARNING: Refused to overwrite ${storeFile}.  (--noclobber used)"
                 } fi
@@ -168,13 +220,14 @@ function processSBF() {
             if [[ ! -z "${prevRINEX%O}" ]]; then rm ${prevRINEX%O}*; fi
             prevRINEX="${currRINEX}"
 
-        } done
+        } done < "${sbfFileList}"
 
         # clean up
-        for prefix in ${currSBF} '???????0.??[_ONG]'; do {
+        [[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"
+        for prefix in ${currSBF} '???????0.??[_ONG]' xppsoffset.${id}; do {
             if [[ ! -z "${prefix}" ]]; then {
-                for file in ${prefix}*; do {
-                    [[ -e ${file} ]] && rm ${file}
+                for oldfile in ${prefix}*; do {
+                    [[ -e ${oldfile} ]] && rm ${oldfile}
                 } done
             } fi
         } done
@@ -189,20 +242,26 @@ function processSBF() {
 
 while [[ ${#} -gt 0 ]]; do {
     case ${1} in 
-        noc*|noC*|--no* )       clobber="no"; shift;;
+        noc*|noC*|--noc* )      clobber="no"; shift;;
         reb*|REB*|--reb* )      rebuild="yes"; shift;;
+        rin*|RIN*|--rin* )      doRIN="yes"; shift;;
+        cgg*|CGG*|--cgg* )      doCGG="yes"; doRIN="yes"; shift;;
+        off*|OFF*|--off* )      doOff="yes"; shift;;
+        dry*|--dry* )           dryrun="yes"; shift;;
+        lz*|--lz* )             zProg="lzop"; zExt=".lzop" shift;;
+        gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;
         *)                      erex=${1}; shift;;
     esac
 } done
 
-logMsg DEBUG: clobber = ${clobber}
-logMsg DEBUG: erex = ${erex}
-logMsg DEBUG: rebuild = ${rebuild}
+#logMsg DEBUG: clobber = ${clobber}
+#logMsg DEBUG: erex = ${erex}
+#logMsg DEBUG: rebuild = ${rebuild}
 
 renice 20 -p $$ >/dev/null 2>&1
 
 for id in ${recvList}; do {
     set -e 
-    logMsg DEBUG: $PWD
+    #logMsg DEBUG: $PWD
     processSBF ${id}
 } done
