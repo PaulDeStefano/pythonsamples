@@ -21,6 +21,7 @@
 import pysbf
 import argparse
 from datetime import datetime
+from sys import stderr
 
 # this is the UNIX time (epoch 1/1/1970) of the start of GNSS epoch (1/6/1980)
 #GNSSepochInUNIXepoch = 315964819
@@ -33,6 +34,9 @@ leapSecSince1972 = 16
 # but, I can only understand this one, so far, and it seems to match
 epochDiffNow = float(GNSSepochInUNIXepoch - 16)
 
+class t2kSBFDataError(Exception):
+    """ exception class to raise errors in SBF data """
+    pass
 
 class t2kSeptPVTTime:
     """Helps convert GNSS time to other times
@@ -50,9 +54,14 @@ class t2kSeptPVTTime:
             # GLONASS timestamps on SBF blocks
             #print("DEBUG: SBF block uses UTC timeSystem")
             raise Exception("SBF block uses GLONASS time, not yet implimented.")
+        elif timeSystem == 255 :
+            # GLONASS timestamps on SBF blocks
+            #raise Exception("ERROR: SBF block has error TimeSystem: 255")
+            raise t2kSBFDataError
         else:
-            raise Exception('ERROR: SBF timeSystem unrecognized: {}'.format(timeSystem) )
+            raise Exception("ERROR: SBF timeSystem unrecognized: {}".format(timeSystem) )
 
+        self.error = 0
         self.WNc=WNc
         self.TOW=TOW
         #print("Week number:{0}; ToW:{1}".format(WNc,TOW))
@@ -76,8 +85,6 @@ class t2kSeptPVTTime:
         mjd = jd - 2400000.5
         return (iso8601, self.unixtime, self.WNc, self.TOW, jd, mjd, dayOfYear)
 
-
-
 def doStuff(f) :
     """
     This function opens the given file, assuming it's a SBF file.
@@ -89,7 +96,11 @@ def doStuff(f) :
     with open(f,'r') as sbf_fobj:
       #for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'},limit=10):
       for blockName, block in pysbf.load(sbf_fobj, blocknames={'PVTGeodetic_v2'}):
-        rcvrTime = t2kSeptPVTTime(WNc=block['WNc'], TOW=block['TOW'], timeSystem=block['TimeSystem'])
+        try:
+            rcvrTime = t2kSeptPVTTime(WNc=block['WNc'], TOW=block['TOW'], timeSystem=block['TimeSystem'])
+        except t2kSBFDataError as e:
+            stderr.write("ERROR: bad data found in PVTGeo block\n")
+            continue
         errCode=block['Error']
         phi=block['Phi']
         lmbd=block['Lambda']
