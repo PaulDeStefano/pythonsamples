@@ -32,6 +32,7 @@ import time
 from datetime import datetime
 from calendar import timegm
 import argparse
+from operator import sub
 
 class AnchoredText( AnchoredOffsetbox ):
     def __init__(self, s, loc, pad=0.4, borderpad=0.5, prop=None, frameon=True):
@@ -123,7 +124,7 @@ def doXPPSCorrections(dataSet):
     #logMsg("DEBUG: offsetList length: "+str(len(offsetL['offset'])) )
     return ( valueFixedL, offsetL , timeFixedL )
 
-def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLine=True, subMean=True, units=''):
+def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLine=True, subMean=True, units='', mean=0, stddev=0):
 
         if not axis:
             raise Exception("ERROR: no axis for plotting")
@@ -131,13 +132,10 @@ def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLi
             raise Exception("ERROR: no data to plot")
 
 
-        mean = np.mean(y)
-        stddev = np.std(y)
-        extraText = r' $\sigma$'+'={0:.2G}'.format(stddev)
         x = [ matplotlib.dates.date2num( datetime.utcfromtimestamp( timegm(t) ) ) for t in x ]
         if subMean:
             y = [ (d - mean) for d in y ]
-        obj = axis.plot_date( x, y, fmt , xdate=True, ydate=False , label=label+extraText, tz='UTC')
+        obj = axis.plot_date( x, y, fmt , xdate=True, ydate=False , label=label, tz='UTC')
         c = obj[0].get_color()
 
         # beautify
@@ -216,9 +214,10 @@ def plotDateHelper(title="no title",xyList=None):
         # for each pair of x and y series
         # pull out x and y
         xSeries , ySeries , label , mean, stddev , units = xy
+        extraText = r' $\sigma$'+'={0:.2G},$\mu=${1:.2G}'.format(stddev,mean)
         #logMsg("DEBUG: plotDataHelper: adding data labeled: "+label)
         # plot on date axis
-        plotDateOnAxis(axis=axx, x=xSeries,y=ySeries, label=label , subMean=False, fmt=fmt, units=units)
+        plotDateOnAxis(axis=axx, x=xSeries,y=ySeries, label=label+extraText , subMean=False, fmt=fmt, units=units, mean=mean, stddev=stddev)
 
     host.set_xlabel("Time: "+startasc+" - "+endasc)
     host.set_title(title)
@@ -226,7 +225,7 @@ def plotDateHelper(title="no title",xyList=None):
     plt.legend().get_frame().set_alpha(0.8)
     plt.draw()
     print("Showing values: "+title)
-    plt.show()
+    #plt.show()
     
     # histograms
     for xy in xyList:
@@ -240,31 +239,19 @@ def plotDateHelper(title="no title",xyList=None):
         ax.set_ylabel("Counts in bin")
         extraText = r' $\sigma$'+'={0:.2G}'.format(stddev)
         extraText += r',$\mu$'+'={0:.2G}'.format(mean)
-        fig2.suptitle(title+" Histogram of "+label+extraText)
+        fig2.suptitle(title+": Histogram of "+label+": "+extraText)
         print("Showing histogram of values:"+label+extraText)
-        plt.show()
+        #plt.show()
         del(fig2)
 
+    plt.show()
 
-def analyseSet(dataSet,label='label',title="title", units=''):
-    global numBins, description, maxEpochGap
-    global offsetDB, offsetFile
-
-    # separate data into columns
-    timeL , valueL = [],[]
-    for t,val in dataSet:
-        timeL.append(t)
-        valueL.append(val)
-
+def getStats( timeL, valueL ):
     # stats
     mean, stddev = None, None
     mean = np.mean(valueL)
     stddev = np.std(valueL)
-
-    xyTriple = [timeL,valueL, label]
-    xyTuple = ( timeL, valueL, label, mean, stddev , units )
-    #logMsg("DEBUG: ", type(xyTriple) )
-
+    
     # display epoch
     startasc = time.asctime(timeL[0])
     startUNIX = str( timegm(timeL[0]) )
@@ -273,42 +260,49 @@ def analyseSet(dataSet,label='label',title="title", units=''):
     print 'epoch start: '+startasc+' '+startUNIX
     print 'epoch end  : '+endasc+' '+endUNIX
 
+    return mean, stddev, startasc, startUNIX, endasc, endUNIX
+
+def analyseSet(dataSet,label='label',title="title", units=''):
+    global numBins, description, maxEpochGap
+    global offsetDB, offsetFile
+
+    # separate data into columns
+    timeL , valueL = [],[]
+
+    if len(offsetDB):
+        """ apply offsets """
+        ( valueL , offsetL , timeL ) = doXPPSCorrections( dataSet )
+        label="corrected "+label
+
+    else:
+        """ do nothing else"""
+        for t,val in dataSet:
+            timeL.append(t)
+            valueL.append(val)
+
+    mean, stddev, startasc, startUNIX, endasc, endUNIX = getStats( timeL,valueL )
+    xyTuple = ( timeL, valueL, label, mean, stddev , units )
+    #logMsg("DEBUG: ", type(xyTriple) )
+
     #print("DEBUG: length of values: {}".format(len(valueL)) )
     #print("DEBUG: length of fixed values: {}".format(len(valueFixedL)) )
 
-    # basic plot
-    plotDateHelper(title=title,xyList=[ xyTuple ])
+    plotDateHelper(title=title, xyList=[ xyTuple ] )
 
-    if not len(offsetDB):
-        # if we haven't the offset data loaded, already, check to see
-        # if we can load it from a file
-        if offsetFile:
-            # we can load it, so try
-            loadOffsets(offsetFile)
-            #logMsg("DEBUG: analyseSet: ", str(offsetDB[...,0]) )
-            if not len(offsetDB):
-                raise Exception('XPPSOffset values NOT loaded!',len(offsetDB))
-
-    if len(offsetDB):
-        # perform xPPSOffset corrections
-        ( valueFixedL , offsetL , timeFixedL ) = doXPPSCorrections( dataSet )
-        if(len(offsetL) == 0 ):
-            raise Exception("ERROR: failed to applay any offset corrections")
-        # show data with offset to compare
-        logMsg("DEBUG: analyse: valueFixedL len:",str(len(valueFixedL)) )
-        #logMsg("DEBUG: analyse: offsetL len:",str(len(offsetL)) )
-        offsetXYtuple = (timeFixedL,offsetL,'xPPSoffset', np.mean(offsetL),np.std(offsetL), 'ns')
-        xyList = [ xyTuple, offsetXYtuple ]
-        plotDateHelper(title=title, xyList=xyList)
-
-        # show applied offssets
-        meanFixed = np.mean(valueFixedL)
-        stddevFixed = np.std(valueFixedL)
-        print "adjusted mean:", meanFixed
-        print "adjusted stddev:", stddevFixed
-        offsetXYtuple = (timeFixedL, valueFixedL,'adjusted dT', meanFixed , stddevFixed, 'ns')
-        xyList = [ offsetXYtuple ]
-        plotDateHelper(title=title, xyList=xyList )
+    ## Find first differences
+    logMsg("NOTICE: calculating first differences")
+    a,b = 0,1
+    firstDiffL =  []
+    while b <= len(valueL)-1 :
+        firstDiffL.append( (valueL[a]-valueL[b]) )
+        a+=1
+        b+=1
+    xL,yL = zip( *zip(timeL, firstDiffL) )
+    mean, stddev, startasc, startUNIX, endasc, endUNIX = getStats( xL,yL )
+    #xyTuple = ( xL, yL, label, mean, stddev, units )
+    #plotDateHelper(title="First Differeces: "+title, xyList=[ xyTuple ] )
+    xyTuple = ( xL, yL, "Frac Freq Departure", mean, stddev, "PPB" )
+    plotDateHelper(title=title, xyList=[ xyTuple ] )
 
 def doStuff() :
     global inputFiles
@@ -336,7 +330,7 @@ def doStuff() :
             delta = fields[1]
             nsec = fields[3]
             if len(fields) >= 4 :
-                unixtime = float(fields[2])
+                unixtime = int(fields[2])
                 deltaTime = datetime.utcfromtimestamp(unixtime).timetuple()
             else:
                 if not shiftOffset == float(0):
@@ -344,7 +338,7 @@ def doStuff() :
                 deltaTime = time.strptime(iso8601+' UTC', "%Y-%m-%dT%H:%M:%S %Z")
             #logMsg("DEBUG: doStuff: time spec:", type(deltaTime))
             if prevTime and deltaTime < prevTime :
-                raise Exception("time went backward, out of order or error?")
+                raise Exception("time went backward, out of order or error? prev={} current={}".format(prevTime,deltaTime) )
             # convert to high precision float
             #delta = np.float64(delta)
             delta = float(delta)/10**-9
@@ -370,12 +364,10 @@ def doStuff() :
     #analyseSet(dataArray, label="dT", title="dT: "+description)
     #print "...done."
     
-    ## Find breaks and first differences for each series
+    ## Find breaks for each series
     i1 = 0
     goodData = []
     dataEpochList = []
-    firstDiffList = []
-    diffEpochList = []
     
     while( i1 <= (len(dataArray)-2) ):
         #print "DEBUG: i1: " + str(i1)
@@ -407,20 +399,13 @@ def doStuff() :
             print "WARNING: missing data between " + repr(firstTime) + " & " + repr(secondTime)
             # save first point to finish epoch
             goodData.append( dataArray[i1] )
-            # store data and diff epochs in epoch lists
+            # store data epochs in epoch lists
             dataEpochList.append(goodData)
             goodData = []
-            diffEpochList.append(firstDiffList)
-            firstDiffList = []
         else :
             # okay, these points are part of a contigous series
             # store the first point only
             goodData.append( dataArray[i1] )
-            # calculate & store diff
-            #diff = []
-            diff = [ first[0] , ( second[1] - first[1] ) ]
-            #print "DEBUG: frist diff = " + repr(diff)
-            firstDiffList.append( diff )
         # incriment index
         i1 += 1
     #end while loop#
@@ -430,21 +415,27 @@ def doStuff() :
 
     # store last data and diff lists in the epoch lists as the last epoch of their series
     dataEpochList.append(goodData)
-    diffEpochList.append(firstDiffList)
     # what did we find?
-    #print "DEBUG: first difference epochs found: " + repr(len(diffEpochList))
     print "NOTICE: epochs found: " + repr(len(dataEpochList))
+
+    # load offset list if it exist
+    if not len(offsetDB):
+        # if we haven't the offset data loaded, already, check to see
+        # if we can load it from a file
+        if offsetFile:
+            # we can load it, so try
+            loadOffsets(offsetFile)
+            #logMsg("DEBUG: analyseSet: ", str(offsetDB[...,0]) )
+            if not len(offsetDB):
+                raise Exception('XPPSOffset values NOT loaded!',len(offsetDB))
 
     ## Plot data, differences, and histograms for each epoch
     epochN = 0;
-    for dataSet, diffSet in zip( dataEpochList, diffEpochList ) :
+    for dataSet in dataEpochList:
         epochN = epochN +1
         print "Analysing epoch: " + str(epochN)
         print "Analysing original measurements"
-        analyseSet( dataSet , label='dT', title="dT: "+description, units='ns')
-        print "Analysing first differences"
-        analyseSet( diffSet , "dT1-dT2" , "First Differences: "+description, units='ns' )
-        print "...done"
+        analyseSet( dataSet , label='dT', title=description, units='ns')
 
 def loadOffsets(file):
     """ Retreive xPPSOffset values from file.
@@ -461,8 +452,10 @@ def loadOffsets(file):
     print("NOTICE: trying to import offset data...")
     with open(file,'r') as fh:
         offsetDB = np.loadtxt(fh
-                , dtype={'names': ('asctime','offset','unixtime','four','five','six','seven','eight')
-                , 'formats':('S19',np.float64,np.float64,'i4','i4','f4','f4','i4')}
+#                , dtype={'names': ('asctime','offset','unixtime','four','five','six','seven','eight')
+#                , 'formats':('S19',np.float64,np.float64,'i4','i4','f4','f4','i4')}
+                , dtype={'names': ('asctime','offset','unixtime')
+                , 'formats':('S19',np.float64,np.float64,'i4')}
                 , converters={2: lambda u: int(float(u))+shiftOffset }
                 , delimiter=',')
         #logMsg("DEBUG: loadOffsetdb: ",len(offsetDB['offset'])) 
