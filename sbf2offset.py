@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.7
 """ sbf2offset.py
     Reads SBF binary data files and produces plain text file
     containing xPPSOffset data values
