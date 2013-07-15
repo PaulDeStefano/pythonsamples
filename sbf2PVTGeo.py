@@ -129,7 +129,7 @@ SBF formated files.  It locates any and all xPPSOffset blocks and prints the
 ISO8601 date, xppsoffset, and UNIX time from each block.
 
 output format:
-<isoDate>,<xPPSOffset>,<UNIXtime>,<WNc>,<TOW>,<JulianDay>,<MJD>
+<isoDate>,<UNIXtime>,<SBF blk errCode>,<phi>,<lambda>,<height>,<rxClkBias>,<rxClkDrift>,<WNc>,<TOW>,<JulianDay>,<MJD>,<dayOfYear>
 
 For validation purposes, the output data also includes the GNSS Week Number
 (WNc) and Time of Week (TOW).
@@ -140,12 +140,17 @@ TOW = number of miliseconds since start of the current week
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')
     #parser.add_argument('--outfile',nargs='?',help='output file')
+    parser.add_argument('--header',action='store_true',default=True,help='produce column description strings as first line of output (default)')
+    parser.add_argument('--noheader',action='store_false',default=False,help='omit header at beginning of output')
     args = parser.parse_args()
     #print(args.fileList)
     fileList = args.fileList
+    header = args.header
     #outfile = args.outfile
     #print('working on files:'+str(fileList)+'\n')
 
+    if (header):
+        print '#ISO_Date,UNIX_time,SBFblkErrCode,phi,lambda,height,rxClkBias,rxClkDrift,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear'
     for f in fileList :
         #print('working on file: '+f)
         doStuff(f)
