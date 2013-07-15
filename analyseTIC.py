@@ -71,7 +71,7 @@ def doXPPSCorrections(dataSet):
         # reverse sign of correction if set (default)
         coeff = -1
 
-    print "Applying xPPSOffset Corrections..."
+    logMsg("NOTICE: Applying xPPSOffset Corrections...")
 
     # TODO: make sure data set is sorted
     """ 
@@ -119,9 +119,21 @@ def doXPPSCorrections(dataSet):
         #logMsg('DEBUG: val:{} offset:{} fixed:{}'.format(str(val),str(offsetVal),str(valFixed)))
         #logMsg( "DEBUG: success")
 
-    print "...done"
+    logMsg("...done")
     #logMsg("DEBUG: doXPPS: "+str(type(offsetL)) )
     #logMsg("DEBUG: offsetList length: "+str(len(offsetL['offset'])) )
+
+    '''Store results'''
+    global storeFilePrefix, storeFileCount
+    if storeFilePrefix:
+        with open(storeFilePrefix+str(storeFileCount)+'.dat', 'w') as fh:
+            for a,b in zip(timeFixedL, valueFixedL):
+                epochTime=timegm(a)
+                dttime = datetime.utcfromtimestamp(epochTime)
+                isodate = dttime.isoformat()
+                print >>fh,isodate,b,epochTime
+        storeFileCount += 1
+
     return ( valueFixedL, offsetL , timeFixedL )
 
 def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLine=True, subMean=True, units='', mean=0, stddev=0, extraLabel=''):
@@ -214,6 +226,7 @@ def plotDateHelper(title="no title",xyList=None):
     for xy, axx , fmt in zip( xyList , axisL , ['b,','g,','y,'] ):
         # for each pair of x and y series
         # pull out x and y
+        axx.grid(b=True,axis='both')
         xSeries , ySeries , label , mean, stddev , units = xy
         extraText = r' $\sigma$'+'={0:.2G},$\mu=${1:.2G}'.format(stddev,mean)
         #logMsg("DEBUG: plotDataHelper: adding data labeled: "+label)
@@ -224,6 +237,7 @@ def plotDateHelper(title="no title",xyList=None):
     host.set_title(title)
     plt.setp(host.xaxis.get_majorticklabels(), rotation=30)
     plt.legend().get_frame().set_alpha(0.8)
+    fig1.subplots_adjust(left=0.07,right=0.95,bottom=0.13,top=0.95,wspace=0.2,hspace=0.2)
     plt.draw()
     print("Showing values: "+title)
     #plt.show()
@@ -242,6 +256,7 @@ def plotDateHelper(title="no title",xyList=None):
         extraText += r',$\mu$'+'={0:.2G}'.format(mean)
         fig2.suptitle(title+": Histogram of "+label+": "+extraText)
         print("Showing histogram of values:"+label+extraText)
+        fig2.subplots_adjust(left=0.07,right=0.95,bottom=0.10,top=0.95,wspace=0.2,hspace=0.2)
         #plt.show()
         #del(fig2)
 
@@ -254,7 +269,13 @@ def getStats( timeL, valueL ):
     stddev = np.std(valueL)
     
     # display epoch
-    startasc = time.asctime(timeL[0])
+    try:
+        startasc = time.asctime(timeL[0])
+    except:
+        logMsg("ERROR: couldn't handle time list:",len(timeL))
+        logMsg("ERROR: couldn't handle time value:",timeL[0])
+        raise
+
     startUNIX = str( timegm(timeL[0]) )
     endasc = time.asctime(timeL[len(timeL)-1])
     endUNIX = str( timegm(timeL[len(timeL)-1]) )
@@ -280,6 +301,10 @@ def analyseSet(dataSet,label='label',title="title", units=''):
         for t,val in dataSet:
             timeL.append(t)
             valueL.append(val)
+
+    if len(timeL) <= 2:
+        logMsg("WARNING: skipping small dataset:",len(timeL))
+        return 1
 
     mean, stddev, startasc, startUNIX, endasc, endUNIX = getStats( timeL,valueL )
     xyTuple = ( timeL, valueL, label, mean, stddev , units )
@@ -312,10 +337,11 @@ def analyseSet(dataSet,label='label',title="title", units=''):
 def doStuff() :
     global inputFiles
     global shiftOffset
+    global importLimit
 
     goodCount = 0
     lineCount = 0
-    limit = 100000000
+    limit = importLimit
     #limit = 1000000
     bufLimit = 10
     dataArray = []
@@ -333,6 +359,10 @@ def doStuff() :
             #logMsg(str(fields))
             iso8601 = fields[0]
             delta = fields[1]
+            if float(delta) >= 1.0:
+                """nonsense"""
+                logMsg("WARNING: Skipping nonsense dT value: ",delta)
+                continue
             nsec = fields[3]
             if len(fields) >= 4 :
                 unixtime = int(fields[2])
@@ -457,10 +487,10 @@ def loadOffsets(file):
     print("NOTICE: trying to import offset data...")
     with open(file,'r') as fh:
         offsetDB = np.loadtxt(fh
-                , dtype={'names': ('asctime','offset','unixtime','four','five','six','seven','eight')
-                , 'formats':('S19',np.float64,np.float64,'i4','i4','f4','f4','i4')}
-#                , dtype={'names': ('asctime','offset','unixtime')
-#                , 'formats':('S19',np.float64,np.float64,'i4')}
+#                , dtype={'names': ('asctime','offset','unixtime','four','five','six','seven','eight')
+#                , 'formats':('S19',np.float64,np.float64,'i4','i4','f4','f4','i4')}
+                , dtype={'names': ('asctime','offset','unixtime')
+                , 'formats':('S19',np.float64,np.float64,'i4')}
                 , converters={2: lambda u: float(u)+shiftOffset }
                 , delimiter=',')
         #logMsg("DEBUG: loadOffsetdb: ",len(offsetDB['offset'])) 
@@ -481,15 +511,22 @@ parser.add_argument('--addOffset', dest='negOffset', action='store_false', defau
 parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='Boolean. Subtract offset values from TIC measurements (dT)')
 parser.add_argument('--histbins', nargs='?', default=100, help='Number of bins in histograms')
 parser.add_argument('--shiftOffset', '-s', nargs='?', default=0.0, help='shift time of xPPSOffset corrections wrt. TIC measurements by this many seconds')
+parser.add_argument('--importLimit', '-L', nargs='?', default=100000000, help='limit imported data to the first <limit> lines')
+parser.add_argument('--outputPrefix', nargs='?', default=False, help='Save the results of the applised xPPSOffset corrections to a series of files with this name prefix')
 args = parser.parse_args()
 inputFiles = args.fileList
 description = args.desc
 maxEpochGap = float(args.gap)
 offsetFile = args.offsets
 negOffset = args.negOffset
-numBins = args.histbins
+numBins = int(args.histbins)
+importLimit = int(args.importLimit)
 shiftOffset = float(args.shiftOffset)
+storeFilePrefix = args.outputPrefix
 #print("DEBUG: negOffset:" + str(negOffset) )
+
+## Other Defaults
+storeFileCount=1
 
 # xPPSoffset data
 offsetDB = []
