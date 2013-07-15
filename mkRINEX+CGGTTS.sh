@@ -15,9 +15,13 @@ sbf2offsetProg="/home/pdestefa/local/src/samples/sbf2offset.py"
 offsetTopDir="/home/pdestefa/public_html/organizedData/xPPSOffsets/"
 offsetDir='${offsetTopDir}/${id}/${element}'
 offsetFileName='xppsoffset.${id}.${type}.yr${yr}.day${day}.dat'
+sbf2pvtGeoProg="/home/pdestefa/local/src/samples/sbf2PVTGeo.py"
+pvtGeoTopDir="/home/pdestefa/public_html/organizedData/pvtGeodetic/"
+pvtGeoDir='${pvtGeoTopDir}/${id}/${element}'
+pvtGeoFileName='pvtGeo.${id}.${type}.yr${yr}.day${day}.dat'
 sbfFileList="/tmp/sbfFileList"
 zProg="lzop"
-zExt=".lzop"
+zExt="lzo"
 erex=".13_"
 clobber="yes"
 rebuild="no"
@@ -126,6 +130,9 @@ function mkCGG() {
 
     logMsg "NOTICE: compressing CGGTTS data..."
     gzip -c ${cggFile}.gps >${cggFile}.gps.gz
+    rm ${cggFile}.gps
+    gzip -c ${cggFile}.log >${cggFile}.log.gz
+    rm ${cggFile}.log
     logMsg "NOTICE: ...Done"
 
     rm rinex_*
@@ -135,9 +142,30 @@ function mkCGG() {
 
 function mkOffset() {
   local sbfFile="${1}"
-  local outputFile="${2}"
 
-  /usr/local/bin/python2.7 "${sbf2offsetProg}" "${sbfFile}" >"${outputFile}"
+  logMsg "NOTICE: extracting xPPSOffset data"
+  eval local offsetfile="${offsetFileName}"
+  /usr/local/bin/python2.7 "${sbf2offsetProg}" "${sbfFile}" >"${offsetfile}"
+  eval local offsetFinalDir="${offsetDir}"
+  if [[ ! -d ${offsetFinalDir} ]]; then mkdir --parents ${offsetFinalDir}; fi
+  #logMsg "DEBUG: moving offset data to ${offsetFinalDir}"
+  ${zProg} -c "${offsetfile}" >${offsetfile}.${zExt}
+  mv  "${offsetfile}.${zExt}" "${offsetFinalDir}"/.
+  rm "${offsetfile}"
+}
+
+function mkPVTGeo() {
+  local sbfFile="${1}"
+
+  logMsg "NOTICE: extracting PVTGeodetic data"
+  eval local pvtGeoFile="${pvtGeoFileName}"
+  eval local pvtGeoFinalDir="${pvtGeoDir}"
+  /usr/local/bin/python2.7 "${sbf2pvtGeoProg}" "${sbfFile}" >"${pvtGeoFile}"
+  if [[ ! -d ${pvtGeoFinalDir} ]]; then mkdir --parents ${pvtGeoFinalDir}; fi
+  #logMsg "DEBUG: moving offset data to ${pvtGeoFinalDir}"
+  ${zProg} -c "${pvtGeoFile}" >${pvtGeoFile}.${zExt}
+  mv  "${pvtGeoFile}.${zExt}" "${pvtGeoFinalDir}"/.
+  rm "${pvtGeoFile}"
 }
 
 function processSBF() {
@@ -149,6 +177,7 @@ function processSBF() {
 
     for element in ${pathGrps}; do {
         currSBF="currSBF"
+        prevRINEX=""
 
         getSBF ${element} ${id} ${erex} > "${sbfFileList}"
         while read file; do {
@@ -179,14 +208,10 @@ function processSBF() {
             } fi 
 
             # extract xPPSOffset data
-            logMsg "NOTICE: extracting xPPSOffset data"
-            eval local offsetfile="${offsetFileName}"
-            mkOffset "${currSBF}" "${offsetfile}"
-            eval local offsetFinalDir="${offsetDir}"
-            if [[ ! -d ${offsetFinalDir} ]]; then mkdir --parents ${offsetFinalDir}; fi
-            logMsg "DEBUG: moving offset data to ${offsetFinalDir}"
-            ${zProg} -c "${offsetfile}" >${offsetfile}.${zExt}
-            mv  "${offsetfile}.${zExt}" "${offsetFinalDir}"/.
+            mkOffset "${currSBF}"
+
+            # extract PVTGeodetic data
+            mkPVTGeo "${currSBF}"
 
             # make RINEX
             currRINEX="${rinexFile}"
@@ -217,14 +242,14 @@ function processSBF() {
                 } fi
             } done
 
-            if [[ ! -z "${prevRINEX%O}" ]]; then rm ${prevRINEX%O}*; fi
+            if [[ ! -z "${prevRINEX%O}" ]]; then [ -f ${prevRINEX} ] && rm ${prevRINEX%O}*; fi
             prevRINEX="${currRINEX}"
 
         } done < "${sbfFileList}"
 
         # clean up
         [[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"
-        for prefix in ${currSBF} '???????0.??[_ONG]' xppsoffset.${id}; do {
+        for prefix in ${currSBF} '???????0.??[_ONG]' ; do {
             if [[ ! -z "${prefix}" ]]; then {
                 for oldfile in ${prefix}*; do {
                     [[ -e ${oldfile} ]] && rm ${oldfile}
@@ -248,7 +273,7 @@ while [[ ${#} -gt 0 ]]; do {
         cgg*|CGG*|--cgg* )      doCGG="yes"; doRIN="yes"; shift;;
         off*|OFF*|--off* )      doOff="yes"; shift;;
         dry*|--dry* )           dryrun="yes"; shift;;
-        lz*|--lz* )             zProg="lzop"; zExt=".lzop" shift;;
+        lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
         gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;
         *)                      erex=${1}; shift;;
     esac
