@@ -1,7 +1,7 @@
 #!/usr/bin/python2.7
 """ sbf2offset.py
     Reads SBF binary data files and produces plain text file
-    containing xPPSOffset data values
+    containing PVTGeoblock data
 
     Copyright (C) 2013 Paul R. DeStefano
 
@@ -21,6 +21,7 @@
 import pysbf
 import argparse
 from datetime import datetime
+from sys import stderr
 
 # this is the UNIX time (epoch 1/1/1970) of the start of GNSS epoch (1/6/1980)
 #GNSSepochInUNIXepoch = 315964819
@@ -33,42 +34,34 @@ leapSecSince1972 = 16
 # but, I can only understand this one, so far, and it seems to match
 epochDiffNow = float(GNSSepochInUNIXepoch - 16)
 
-
-def getUTCfromGPStime(gpsWN, gpsTOW):
-    """ NOT IMPLEMENTED YET
-
-    This is one function in the gpstk library.  It would probably be best to
-    use this library or rewrite these algorithms.  But, not now.
-    """
-    #datetime.datetime result
-    result = 0
-
-    if( gpsWN < 0.0 or gpsTOW > 604800.0 ):
-        raise Exception("Invalid GPS Week Number and GPS Time of Week values!")
+class t2kSBFDataError(Exception):
+    """ exception class to raise errors in SBF data """
     pass
 
-
-class t2kSeptTime:
+class t2kSeptPVTTime:
     """Helps convert GNSS time to other times
     """
 
-    def __init__(self, WNc=None, TOW=None, timeScale=None):
-        if timeScale == None:
-            raise Exception("ERROR: init of class t2kSeptTime requires three parameters")
+    def __init__(self, WNc=None, TOW=None, timeSystem=None):
+        if timeSystem == None:
+            raise Exception("ERROR: init of class t2kSeptPVTTime requires three parameters")
 
-        if timeScale == 1:
+        if timeSystem == 0:
             # GNSS timestamps on SBF blocks
-            #print("DEBUG: SBF block uses GNSS timescale")
+            #print("DEBUG: SBF block uses GNSS timeSystem")
             epochDiffNow = float( GNSSepochInUNIXepoch - leapSecSince1972 )
-        elif timeScale == 2:
-            # UTC timestamps on SBF blocks
-            #print("DEBUG: SBF block uses UTC timescale")
-            raise Exception("SBF block uses UTC.  implimentation not yet verifyed.")
-            #TODO : I had better check this.
-            epochDiffNow = float( GNSSepochInUNIXepoch )
+        elif timeSystem == 1:
+            # GLONASS timestamps on SBF blocks
+            #print("DEBUG: SBF block uses UTC timeSystem")
+            raise Exception("SBF block uses GLONASS time, not yet implimented.")
+        elif timeSystem == 255 :
+            # GLONASS timestamps on SBF blocks
+            #raise Exception("ERROR: SBF block has error TimeSystem: 255")
+            raise t2kSBFDataError
         else:
-            raise Exception('ERROR: SBF timescale unrecognized: {}'.format(timeScale) )
+            raise Exception("ERROR: SBF timeSystem unrecognized: {}".format(timeSystem) )
 
+        self.error = 0
         self.WNc=WNc
         self.TOW=TOW
         #print("Week number:{0}; ToW:{1}".format(WNc,TOW))
@@ -92,24 +85,36 @@ class t2kSeptTime:
         mjd = jd - 2400000.5
         return (iso8601, self.unixtime, self.WNc, self.TOW, jd, mjd, dayOfYear)
 
-
-
 def doStuff(f) :
     """
     This function opens the given file, assuming it's a SBF file.
-    It extracts the xPPSoffset value from every xPPSOffset block,
+    It extracts the PVTGeodetic values from every PVTGeo block,
     and prints the results with ASCII and UNIX timestamps
     """
 
     #print('do stuff on file '+f+'...\n')
     with open(f,'r') as sbf_fobj:
       #for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'},limit=10):
-      for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'}):
-        rcvrTime = t2kSeptTime(WNc=block['WNc'], TOW=block['TOW'], timeScale=block['Timescale'])
-        offset=block['Offset']
+      for blockName, block in pysbf.load(sbf_fobj, blocknames={'PVTGeodetic_v2'}):
+        try:
+            rcvrTime = t2kSeptPVTTime(WNc=block['WNc'], TOW=block['TOW'], timeSystem=block['TimeSystem'])
+        except t2kSBFDataError as e:
+            stderr.write("ERROR: bad data found in PVTGeo block\n")
+            continue
+        errCode=block['Error']
+        phi=block['Phi']
+        lmbd=block['Lambda']
+        h=block['h']
+        rxClkBias=block['RxClkBias']
+        rxClkDrift=block['RxClkDrift']
+        nrSV=block['NrSV']
         iso8601, unixtime, WNc, TOW, jd, mjd, dayOfYear = rcvrTime.getTuple()
-        print("{},{},{},{},{},{},{},{}".format(
-                iso8601, round(offset, 3), unixtime,
+        print("{},{},{},{},{},{},{},{},{},{},{},{},{},{}".format(
+                iso8601, unixtime,
+                errCode,
+                phi, lmbd, h,
+                rxClkBias, rxClkDrift,
+                nrSV,
                 WNc, TOW, jd, mjd, dayOfYear))
 
 if __name__ == "__main__" :
@@ -124,7 +129,7 @@ SBF formated files.  It locates any and all xPPSOffset blocks and prints the
 ISO8601 date, xppsoffset, and UNIX time from each block.
 
 output format:
-<isoDate>,<xPPSOffset>,<UNIXtime>,<WNc>,<TOW>,<JulianDay>,<MJD>
+<isoDate>,<UNIXtime>,<SBF blk errCode>,<phi>,<lambda>,<height>,<rxClkBias>,<rxClkDrift>,<WNc>,<TOW>,<JulianDay>,<MJD>,<dayOfYear>
 
 For validation purposes, the output data also includes the GNSS Week Number
 (WNc) and Time of Week (TOW).
@@ -135,12 +140,17 @@ TOW = number of miliseconds since start of the current week
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')
     #parser.add_argument('--outfile',nargs='?',help='output file')
+    parser.add_argument('--header',action='store_true',default=True,help='produce column description strings as first line of output (default)')
+    parser.add_argument('--noheader',action='store_false',default=False,help='omit header at beginning of output')
     args = parser.parse_args()
     #print(args.fileList)
     fileList = args.fileList
+    header = args.header
     #outfile = args.outfile
     #print('working on files:'+str(fileList)+'\n')
 
+    if (header):
+        print '#ISO_Date,UNIX_time,SBFblkErrCode,phi,lambda,height,rxClkBias,rxClkDrift,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear'
     for f in fileList :
         #print('working on file: '+f)
         doStuff(f)
