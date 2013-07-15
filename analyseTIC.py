@@ -124,7 +124,7 @@ def doXPPSCorrections(dataSet):
     #logMsg("DEBUG: offsetList length: "+str(len(offsetL['offset'])) )
     return ( valueFixedL, offsetL , timeFixedL )
 
-def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLine=True, subMean=True, units='', mean=0, stddev=0):
+def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLine=True, subMean=True, units='', mean=0, stddev=0, extraLabel=''):
 
         if not axis:
             raise Exception("ERROR: no axis for plotting")
@@ -135,7 +135,7 @@ def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLi
         x = [ matplotlib.dates.date2num( datetime.utcfromtimestamp( timegm(t) ) ) for t in x ]
         if subMean:
             y = [ (d - mean) for d in y ]
-        obj = axis.plot_date( x, y, fmt , xdate=True, ydate=False , label=label, tz='UTC')
+        obj = axis.plot_date( x, y, fmt , xdate=True, ydate=False , label=label+extraLabel, tz='UTC')
         c = obj[0].get_color()
 
         # beautify
@@ -207,17 +207,18 @@ def plotDateHelper(title="no title",xyList=None):
     endasc = time.asctime(xSeries[len(xSeries)-1])
 
     # start plot
+    fig1 = plt.figure()
     host = host_subplot(111)
     axisL = prepFigure(host,xyList)
 
-    for xy, axx , fmt in zip( xyList , axisL , ['bo','go','yo'] ):
+    for xy, axx , fmt in zip( xyList , axisL , ['b,','g,','y,'] ):
         # for each pair of x and y series
         # pull out x and y
         xSeries , ySeries , label , mean, stddev , units = xy
         extraText = r' $\sigma$'+'={0:.2G},$\mu=${1:.2G}'.format(stddev,mean)
         #logMsg("DEBUG: plotDataHelper: adding data labeled: "+label)
         # plot on date axis
-        plotDateOnAxis(axis=axx, x=xSeries,y=ySeries, label=label+extraText , subMean=False, fmt=fmt, units=units, mean=mean, stddev=stddev)
+        plotDateOnAxis(axis=axx, x=xSeries,y=ySeries, label=label , subMean=False, fmt=fmt, units=units, mean=mean, stddev=stddev, extraLabel=extraText)
 
     host.set_xlabel("Time: "+startasc+" - "+endasc)
     host.set_title(title)
@@ -242,9 +243,9 @@ def plotDateHelper(title="no title",xyList=None):
         fig2.suptitle(title+": Histogram of "+label+": "+extraText)
         print("Showing histogram of values:"+label+extraText)
         #plt.show()
-        del(fig2)
+        #del(fig2)
 
-    plt.show()
+    #plt.show()
 
 def getStats( timeL, valueL ):
     # stats
@@ -291,18 +292,22 @@ def analyseSet(dataSet,label='label',title="title", units=''):
 
     ## Find first differences
     logMsg("NOTICE: calculating first differences")
-    a,b = 0,1
+    step=1
+    a = 0
+    b = a+step
     firstDiffL =  []
     while b <= len(valueL)-1 :
-        firstDiffL.append( (valueL[a]-valueL[b]) )
-        a+=1
-        b+=1
+        firstDiffL.append( (valueL[a]-valueL[b])/(step) )
+        a+=step
+        b+=step
     xL,yL = zip( *zip(timeL, firstDiffL) )
     mean, stddev, startasc, startUNIX, endasc, endUNIX = getStats( xL,yL )
     #xyTuple = ( xL, yL, label, mean, stddev, units )
     #plotDateHelper(title="First Differeces: "+title, xyList=[ xyTuple ] )
-    xyTuple = ( xL, yL, "Frac Freq Departure", mean, stddev, "PPB" )
+    xyTuple = ( xL, yL, "Freq Departure", mean, stddev, "PPB" )
     plotDateHelper(title=title, xyList=[ xyTuple ] )
+
+    plt.show()
 
 def doStuff() :
     global inputFiles
@@ -452,11 +457,11 @@ def loadOffsets(file):
     print("NOTICE: trying to import offset data...")
     with open(file,'r') as fh:
         offsetDB = np.loadtxt(fh
-#                , dtype={'names': ('asctime','offset','unixtime','four','five','six','seven','eight')
-#                , 'formats':('S19',np.float64,np.float64,'i4','i4','f4','f4','i4')}
-                , dtype={'names': ('asctime','offset','unixtime')
-                , 'formats':('S19',np.float64,np.float64,'i4')}
-                , converters={2: lambda u: int(float(u))+shiftOffset }
+                , dtype={'names': ('asctime','offset','unixtime','four','five','six','seven','eight')
+                , 'formats':('S19',np.float64,np.float64,'i4','i4','f4','f4','i4')}
+#                , dtype={'names': ('asctime','offset','unixtime')
+#                , 'formats':('S19',np.float64,np.float64,'i4')}
+                , converters={2: lambda u: float(u)+shiftOffset }
                 , delimiter=',')
         #logMsg("DEBUG: loadOffsetdb: ",len(offsetDB['offset'])) 
     print("NOTICE: ...done ")
