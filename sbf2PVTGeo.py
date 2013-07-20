@@ -108,14 +108,18 @@ def doStuff(f) :
         rxClkBias=block['RxClkBias']
         rxClkDrift=block['RxClkDrift']
         nrSV=block['NrSV']
+        mode=block['Mode']
+        signalInfo=block['SignalInfo']
+        alertFlag=block['AlertFlag']
         iso8601, unixtime, WNc, TOW, jd, mjd, dayOfYear = rcvrTime.getTuple()
-        print("{},{},{},{},{},{},{},{},{},{},{},{},{},{}".format(
+        print("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}".format(
                 iso8601, unixtime,
                 errCode,
                 phi, lmbd, h,
                 rxClkBias, rxClkDrift,
                 nrSV,
-                WNc, TOW, jd, mjd, dayOfYear))
+                WNc, TOW, jd, mjd, dayOfYear,
+                mode, signalInfo, alertFlag ) )
 
 if __name__ == "__main__" :
     #print('hi\n')
@@ -129,7 +133,7 @@ SBF formated files.  It locates any and all xPPSOffset blocks and prints the
 ISO8601 date, xppsoffset, and UNIX time from each block.
 
 output format:
-<isoDate>,<UNIXtime>,<SBF blk errCode>,<phi>,<lambda>,<height>,<rxClkBias>,<rxClkDrift>,<WNc>,<TOW>,<JulianDay>,<MJD>,<dayOfYear>
+<isoDate>,<UNIXtime>,<SBF blk errCode>,<phi>,<lambda>,<height>,<rxClkBias>,<rxClkDrift>,<# Satellites in PVT>,<WNc>,<TOW>,<JulianDay>,<MJD>,<dayOfYear>,Mode,SignalInfo,AlertFlag
 
 For validation purposes, the output data also includes the GNSS Week Number
 (WNc) and Time of Week (TOW).
@@ -150,7 +154,7 @@ TOW = number of miliseconds since start of the current week
     #print('working on files:'+str(fileList)+'\n')
 
     if (header):
-        print '#ISO_Date,UNIX_time,SBFblkErrCode,phi,lambda,height,rxClkBias,rxClkDrift,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear'
+        print '#ISO_Date,UNIX_time,SBFblkErrCode,phi,lambda,height,rxClkBias,rxClkDrift,nrSV,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,Mode,SignalInfo,AlertFlag'
     for f in fileList :
         #print('working on file: '+f)
         doStuff(f)
