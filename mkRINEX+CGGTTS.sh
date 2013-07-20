@@ -3,7 +3,7 @@
 
 #sbfTopDir="/home/t2k/public_html/post/gpsgroup/ptdata"
 sbfTopDir="/data-scratch"
-recvList="PT00 PT01 TOKA"
+recvList="PT00 PT01 TOKA PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
 rinexTopDir="/home/pdestefa/public_html/organizedData/rinex"
 rinexDir='${rinexTopDir}/${id}/${element}'
@@ -15,20 +15,21 @@ rinFileName='${id}${day}'
 sbf2offsetProg="/home/pdestefa/local/src/samples/sbf2offset.py"
 offsetTopDir="/home/pdestefa/public_html/organizedData/xPPSOffsets/"
 offsetDir='${offsetTopDir}/${id}/${element}'
-offsetFileName='xppsoffset.${id}.${typ}.yr${yr}.day${day}.dat'
+offsetFileName='xppsoffset.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
 sbf2pvtGeoProg="/home/pdestefa/local/src/samples/sbf2PVTGeo.py"
 pvtGeoTopDir="/home/pdestefa/public_html/organizedData/pvtGeodetic/"
 pvtGeoDir='${pvtGeoTopDir}/${id}/${element}'
-pvtGeoFileName='pvtGeo.${id}.${typ}.yr${yr}.day${day}.dat'
+pvtGeoFileName='pvtGeo.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
 sbfFileList="/tmp/sbfFileList"
 zProg="lzop"
 zExt="lzo"
 erex=".13_"
 clobber="yes"
 rebuild="no"
-doRIN="no"
-doCGG="no"
-doOff="no"
+doRIN="yes"
+doCGG="yes"
+doOff="yes"
+doGEO="yes"
 dryrun="no"
 
 function logMsg() {
@@ -42,7 +43,7 @@ function getSBF() {
     logMsg "NOTICE: working on element ${element}"
 
     # find SBF files
-    ( /usr/bin/find ${sbfTopDir}/sukrnh5/DATA ${sbfTopDir}/gpsptnu1 ${sbfTopDir}/triptgsc/nd280data \
+    ( /usr/bin/find ${sbfTopDir}/sukrnh5/DATA ${sbfTopDir}/gpsptnu1 ${sbfTopDir}/triptgsc/nd280data ${sbfTopDir}/traveller-box \
         -type f -iwholename "*${element}*${id}*.??_*" \
         2>/dev/null \
         | egrep -i "${extraRegex}" \
@@ -54,6 +55,8 @@ function getSBF() {
 function mkRin() {
     local sbf=${1}
     local rin=${2}
+
+    if [[ ! "yes" = ${doRIN} ]]; then logMsg "NOTICE: skipping RINEX production."; return 0; fi
 
     if [ -z "${rin}" ]; then logMsg ERROR: need output name for RINEX data; exit 1; fi
     logMsg "NOTICE: processing SBF data into RINEX files..."
@@ -78,6 +81,7 @@ function mkCGG() {
     local day=${6}
     local yr=${7}
 
+    if [[ ! "yes" = ${doCGG} ]]; then logMsg "NOTICE: skipping CGGTTS production."; return 0; fi
     #logMsg "NOTICE: Working on RINEX/CGGTTS data for id ${id}, day ${day}, year 20${yr}"
 
     # mtch year with MJD
@@ -149,9 +153,12 @@ function mkOffset() {
   local typ=${4}
   local yr=${5}
   local day=${6}
+  local part=${7}
 
+  if [[ ! "yes" = ${doOff} ]]; then logMsg "NOTICE: skipping xPPSOffset production."; return 0; fi
   logMsg "NOTICE: extracting xPPSOffset data"
   eval local offsetfile="${offsetFileName}"
+  offsetfile="$( echo ${offsetfile} | sed 's/\.part0//')"
   /usr/local/bin/python2.7 "${sbf2offsetProg}" "${sbfFile}" >"${offsetfile}"
   eval local offsetFinalDir="${offsetDir}"
   if [[ ! -d ${offsetFinalDir} ]]; then mkdir --parents ${offsetFinalDir}; fi
@@ -168,13 +175,16 @@ function mkPVTGeo() {
   local typ=${4}
   local yr=${5}
   local day=${6}
+  local part=${7}
 
+  if [[ ! "yes" = ${doGEO} ]]; then logMsg "NOTICE: skipping CGGTTS production."; return 0; fi
   logMsg "NOTICE: extracting PVTGeodetic data"
   eval local pvtGeoFile="${pvtGeoFileName}"
+  pvtGeoFile="$( echo ${pvtGeoFile} | sed 's/\.part0//')"
   eval local pvtGeoFinalDir="${pvtGeoDir}"
   /usr/local/bin/python2.7 "${sbf2pvtGeoProg}" "${sbfFile}" >"${pvtGeoFile}"
   if [[ ! -d ${pvtGeoFinalDir} ]]; then mkdir --parents ${pvtGeoFinalDir}; fi
-  logMsg "DEBUG: moving offset data to ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt}"
+  logMsg "DEBUG: moving PVTGeodetic data to ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt}"
   ${zProg} -c "${pvtGeoFile}" >${pvtGeoFile}.${zExt}
   mv  "${pvtGeoFile}.${zExt}" "${pvtGeoFinalDir}"/.
   rm "${pvtGeoFile}"
@@ -206,13 +216,14 @@ function processSBF() {
             currSBF="${id}.${typ}.${unzipped}"
             rinexFile="$( echo ${unzipped%_}O|tr '[:lower:]' '[:upper:]' )"
 
-            local values=$(echo ${unzipped}| sed 's/\(....\)\(...\).\.\(..\)./\1 \2 \3/')
+            local values=$(echo ${unzipped}| sed 's/\(....\)\(...\)\(.\)\.\(..\)./\1 \2 \3 \4/')
             if [[ -z ${values} ]]; then logMsg "ERROR: couldn't understand filename, ${unzipped}, as an SBF file"; exit 1 ; fi
             set ${values}
             local day=${2}
-            local yr=${3}
+            local part=${3}
+            local yr=${4}
 
-            logMsg "DEBUG: basename=${basename},unzipped=${unzipped},currSBF=${currSBF},rinexFile=${rinexFile},element=${element},typ=${typ},day=${day},yr=${yr}"
+            logMsg "DEBUG: basename=${basename},unzipped=${unzipped},currSBF=${currSBF},rinexFile=${rinexFile},element=${element},typ=${typ},day=${day},part=${part},yr=${yr}"
             if [[ "yes" = "${dryrun}" ]]; then logMsg "NOTICE: DRY-RUN, skipping processing."; continue; fi
 
             if [[ ! -e ${currSBF} ]]; then {
@@ -227,10 +238,10 @@ function processSBF() {
             } fi 
 
             # extract xPPSOffset data
-            mkOffset "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}"
+            mkOffset "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
 
             # extract PVTGeodetic data
-            mkPVTGeo "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}"
+            mkPVTGeo "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
 
             # make RINEX
             currRINEX="${rinexFile}"
@@ -269,7 +280,7 @@ function processSBF() {
 
         # clean up
         [[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"
-        for pattrn in ${currSBF} '*???????0.??[_ONG]*' ; do {
+        for pattrn in ${currSBF} '*????????.??[_ONG]*' ; do {
             if [[ ! -z "${pattrn}" ]]; then {
                 for oldfile in ${pattrn}; do {
                     [[ -e ${oldfile} ]] && rm "${oldfile}"
@@ -287,11 +298,15 @@ function processSBF() {
 
 while [[ ${#} -gt 0 ]]; do {
     case ${1} in 
-        noc*|noC*|--noc* )      clobber="no"; shift;;
+        nocl*|noCL*|--nocl* )      clobber="no"; shift;;
         reb*|REB*|--reb* )      rebuild="yes"; shift;;
         rin*|RIN*|--rin* )      doRIN="yes"; shift;;
         cgg*|CGG*|--cgg* )      doCGG="yes"; doRIN="yes"; shift;;
         off*|OFF*|--off* )      doOff="yes"; shift;;
+        norin*|NORIN*|--norin* )      doRIN="no"; shift;;
+        nocgg*|NOCGG*|--nocgg* )      doCGG="no"; shift;;
+        nooff*|NOOFF*|--nooff* )      doOff="no"; shift;;
+        noGEO*|NOGEO*|--nogeo* )      doGEO="no"; shift;;
         dry*|--dry* )           dryrun="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
         gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;
