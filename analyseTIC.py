@@ -57,6 +57,7 @@ def doXPPSCorrections(dataSet):
     """
     global offsetDB
     global negOffset
+    global shiftOffset
     valueFixedL = []
     offsetL = []
     timeFixedL = []
@@ -94,7 +95,7 @@ def doXPPSCorrections(dataSet):
         tm = dataSet[dataPtr][0]
         dataT = timegm( tm )
         offsetT = utOffsetList[offsetPtr]
-        if ( offsetT == dataT ):
+        if ( offsetT == dataT + shiftOffset ):
             # it's working
             val = dataSet[dataPtr][1]
             offsetVal = offsetList[offsetPtr]
@@ -105,8 +106,8 @@ def doXPPSCorrections(dataSet):
             dataPtr += 1
             offsetPtr += 1
         else :
-            while( dataT != offsetT ):
-                if( dataT < offsetT ):
+            while( dataT + shiftOffset != offsetT ):
+                if( dataT + shiftOffset < offsetT ):
                     dataPtr += 1
                 else:
                     offsetPtr += 1
@@ -126,7 +127,9 @@ def doXPPSCorrections(dataSet):
     '''Store results'''
     global storeFilePrefix, storeFileCount
     if storeFilePrefix:
-        with open(storeFilePrefix+str(storeFileCount)+'.dat', 'w') as fh:
+        storeFile=storeFilePrefix+str(storeFileCount)+'.dat'
+        with open(storeFile, 'w') as fh:
+            logMsg("NOTICE: storing applied xppsoffset corrections in file:",storeFile)
             for a,b in zip(timeFixedL, valueFixedL):
                 epochTime=timegm(a)
                 dttime = datetime.utcfromtimestamp(epochTime)
@@ -147,7 +150,7 @@ def plotDateOnAxis(axis=None, label="no label", x=None, y=None, fmt='', stddevLi
         x = [ matplotlib.dates.date2num( datetime.utcfromtimestamp( timegm(t) ) ) for t in x ]
         if subMean:
             y = [ (d - mean) for d in y ]
-        obj = axis.plot_date( x, y, fmt , xdate=True, ydate=False , label=label+extraLabel, tz='UTC')
+        obj = axis.plot_date( x, y, fmt , xdate=True, ydate=False , label=label+extraLabel, tz='UTC', markersize=2.0)
         c = obj[0].get_color()
 
         # beautify
@@ -223,7 +226,7 @@ def plotDateHelper(title="no title",xyList=None):
     host = host_subplot(111)
     axisL = prepFigure(host,xyList)
 
-    for xy, axx , fmt in zip( xyList , axisL , ['b,','g,','y,'] ):
+    for xy, axx , fmt in zip( xyList , axisL , ['b+','g+','y+'] ):
         # for each pair of x and y series
         # pull out x and y
         axx.grid(b=True,axis='both')
@@ -239,7 +242,7 @@ def plotDateHelper(title="no title",xyList=None):
     plt.legend().get_frame().set_alpha(0.8)
     fig1.subplots_adjust(left=0.07,right=0.95,bottom=0.13,top=0.95,wspace=0.2,hspace=0.2)
     plt.draw()
-    print("Showing values: "+title)
+    logMsg("Showing values: "+title)
     #plt.show()
     
     # histograms
@@ -255,7 +258,7 @@ def plotDateHelper(title="no title",xyList=None):
         extraText = r' $\sigma$'+'={0:.2G}'.format(stddev)
         extraText += r',$\mu$'+'={0:.2G}'.format(mean)
         fig2.suptitle(title+": Histogram of "+label+": "+extraText)
-        print("Showing histogram of values:"+label+extraText)
+        logMsg("NOTICE: Showing histogram of values:"+label+extraText)
         fig2.subplots_adjust(left=0.07,right=0.95,bottom=0.10,top=0.95,wspace=0.2,hspace=0.2)
         #plt.show()
         #del(fig2)
@@ -279,8 +282,6 @@ def getStats( timeL, valueL ):
     startUNIX = str( timegm(timeL[0]) )
     endasc = time.asctime(timeL[len(timeL)-1])
     endUNIX = str( timegm(timeL[len(timeL)-1]) )
-    print 'epoch start: '+startasc+' '+startUNIX
-    print 'epoch end  : '+endasc+' '+endUNIX
 
     return mean, stddev, startasc, startUNIX, endasc, endUNIX
 
@@ -307,6 +308,8 @@ def analyseSet(dataSet,label='label',title="title", units=''):
         return 1
 
     mean, stddev, startasc, startUNIX, endasc, endUNIX = getStats( timeL,valueL )
+    logMsg("NOTICE:", 'epoch start: '+startasc+' '+startUNIX )
+    logMsg("NOTICE:", 'epoch end  : '+endasc+' '+endUNIX )
     xyTuple = ( timeL, valueL, label, mean, stddev , units )
     #logMsg("DEBUG: ", type(xyTriple) )
 
@@ -316,21 +319,22 @@ def analyseSet(dataSet,label='label',title="title", units=''):
     plotDateHelper(title=title, xyList=[ xyTuple ] )
 
     ## Find first differences
-    logMsg("NOTICE: calculating first differences")
-    step=1
-    a = 0
-    b = a+step
-    firstDiffL =  []
-    while b <= len(valueL)-1 :
-        firstDiffL.append( (valueL[a]-valueL[b])/(step) )
-        a+=step
-        b+=step
-    xL,yL = zip( *zip(timeL, firstDiffL) )
-    mean, stddev, startasc, startUNIX, endasc, endUNIX = getStats( xL,yL )
-    #xyTuple = ( xL, yL, label, mean, stddev, units )
-    #plotDateHelper(title="First Differeces: "+title, xyList=[ xyTuple ] )
-    xyTuple = ( xL, yL, "Freq Departure", mean, stddev, "PPB" )
-    plotDateHelper(title=title, xyList=[ xyTuple ] )
+    if doFreq:
+        logMsg("NOTICE: calculating first differences")
+        step=1
+        a = 0
+        b = a+step
+        firstDiffL =  []
+        while b <= len(valueL)-1 :
+            firstDiffL.append( (valueL[a]-valueL[b])/(step) )
+            a+=step
+            b+=step
+        xL,yL = zip( *zip(timeL, firstDiffL) )
+        mean, stddev, startasc, startUNIX, endasc, endUNIX = getStats( xL,yL )
+        #xyTuple = ( xL, yL, label, mean, stddev, units )
+        #plotDateHelper(title="First Differeces: "+title, xyList=[ xyTuple ] )
+        xyTuple = ( xL, yL, "Frequency Departure", mean, stddev, "PPB" )
+        plotDateHelper(title=title, xyList=[ xyTuple ] )
 
     plt.show()
 
@@ -351,7 +355,7 @@ def doStuff() :
     prevTime = None
     good = True
     for f in inputFiles:
-        print "NOTICE: working on file: " + f
+        logMsg( "NOTICE: working on file: " + f )
         file = open(f)
         for line in (csv.reader(file,delimiter=' ')):
             #iso8601, delta , unixtime = list(line)
@@ -491,7 +495,7 @@ def loadOffsets(file):
 #                , 'formats':('S19',np.float64,np.float64,'i4','i4','f4','f4','i4')}
                 , dtype={'names': ('asctime','offset','unixtime')
                 , 'formats':('S19',np.float64,np.float64,'i4')}
-                , converters={2: lambda u: float(u)+shiftOffset }
+#                , converters={2: lambda u: float(u)+shiftOffset }
                 , delimiter=',')
         #logMsg("DEBUG: loadOffsetdb: ",len(offsetDB['offset'])) 
     print("NOTICE: ...done ")
@@ -513,17 +517,19 @@ parser.add_argument('--histbins', nargs='?', default=100, help='Number of bins i
 parser.add_argument('--shiftOffset', '-s', nargs='?', default=0.0, help='shift time of xPPSOffset corrections wrt. TIC measurements by this many seconds')
 parser.add_argument('--importLimit', '-L', nargs='?', default=100000000, help='limit imported data to the first <limit> lines')
 parser.add_argument('--outputPrefix', nargs='?', default=False, help='Save the results of the applised xPPSOffset corrections to a series of files with this name prefix')
+parser.add_argument('--frequency', '-F', action='store_true',default=False, help='Calculate Frequency Departure of all time series analysed')
 args = parser.parse_args()
 inputFiles = args.fileList
 description = args.desc
 maxEpochGap = float(args.gap)
 offsetFile = args.offsets
 negOffset = args.negOffset
+#print("DEBUG: negOffset:" + str(negOffset) )
 numBins = int(args.histbins)
 importLimit = int(args.importLimit)
 shiftOffset = float(args.shiftOffset)
 storeFilePrefix = args.outputPrefix
-#print("DEBUG: negOffset:" + str(negOffset) )
+doFreq = args.frequency
 
 ## Other Defaults
 storeFileCount=1
