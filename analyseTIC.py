@@ -74,7 +74,6 @@ def doXPPSCorrections(dataSet):
 
     logMsg("NOTICE: Applying xPPSOffset Corrections...")
 
-    # TODO: make sure data set is sorted
     """ 
     Take the first time value from each list and find the corresponding index
     in the other list.  Then, advace through both lists, checking equality,
@@ -134,7 +133,8 @@ def doXPPSCorrections(dataSet):
                 epochTime=timegm(a)
                 dttime = datetime.utcfromtimestamp(epochTime)
                 isodate = dttime.isoformat()
-                print >>fh,isodate,b,epochTime
+                print >> fh,'%(d)s %(v)0.12f %(u)d' % \
+                        {"d":isodate,"v":b*(1E-9),"u":epochTime}
         storeFileCount += 1
 
     return ( valueFixedL, offsetL , timeFixedL )
@@ -358,7 +358,6 @@ def doStuff() :
         logMsg( "NOTICE: working on file: " + f )
         file = open(f)
         for line in (csv.reader(file,delimiter=' ')):
-            #iso8601, delta , unixtime = list(line)
             fields = list(line)
             #logMsg(str(fields))
             iso8601 = fields[0]
@@ -367,10 +366,11 @@ def doStuff() :
                 """nonsense"""
                 logMsg("WARNING: Skipping nonsense dT value: ",delta)
                 continue
-            nsec = fields[3]
-            if len(fields) >= 4 :
+            if len(fields) >= 3 :
                 unixtime = int(fields[2])
                 deltaTime = datetime.utcfromtimestamp(unixtime).timetuple()
+            elif len(fields) >= 4 :
+                nsec = fields[3]
             else:
                 if not shiftOffset == float(0):
                     raise Exception("ERROR: cannot apply time shift to xPPSoffset data without unixtime in field #4")
@@ -499,6 +499,8 @@ def loadOffsets(file):
                 , delimiter=',')
         #logMsg("DEBUG: loadOffsetdb: ",len(offsetDB['offset'])) 
     print("NOTICE: ...done ")
+
+    offsetDB.sort()
 
 
 ## MAIN ##
