@@ -303,7 +303,7 @@ while [[ ${#} -gt 0 ]]; do {
         rin*|RIN*|--rin* )      doRIN="yes"; shift;;
         cgg*|CGG*|--cgg* )      doCGG="yes"; doRIN="yes"; shift;;
         off*|OFF*|--off* )      doOff="yes"; shift;;
-        norin*|NORIN*|--norin* )      doRIN="no"; shift;;
+        norin*|NORIN*|--norin* )      doRIN="no"; doCGG="no"; shift;;
         nocgg*|NOCGG*|--nocgg* )      doCGG="no"; shift;;
         nooff*|NOOFF*|--nooff* )      doOff="no"; shift;;
         noGEO*|NOGEO*|--nogeo* )      doGEO="no"; shift;;
