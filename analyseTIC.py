@@ -33,6 +33,7 @@ from datetime import datetime
 from calendar import timegm
 import argparse
 from operator import sub
+#from ROOT import TH1D, TVirtualFFT, TF1, TCanvas, TMath
 
 class AnchoredText( AnchoredOffsetbox ):
     def __init__(self, s, loc, pad=0.4, borderpad=0.5, prop=None, frameon=True):
@@ -338,6 +339,31 @@ def analyseSet(dataSet,label='label',title="title", units=''):
 
     plt.show()
 
+    """ try FFT """
+    if doFT:
+        from numpy.fft import fft, rfft, fftfreq
+        logMsg("NOTICE: Try FFT")
+        a = np.array(valueL,dtype=np.float64)
+        fftvals = fft(a)
+        normConst = (1/np.sqrt(2*np.pi))
+        ampSpectrum = abs(normConst*fftvals)
+        powerSpec = ampSpectrum**2
+        freqs = fftfreq(a.size)
+        units = 1
+        freqFix=1/units
+        periodFix=1/units
+        waveN = 2*np.pi/(freqs*freqFix)
+        periods = 1/(freqs*freqFix)
+        # plot it
+        #plt.plot(fix*freqs,powerSpec, '+')
+        fig3 = plt.figure()
+        ax = fig3.add_subplot(111, yscale='log')
+        ax.set_xlabel("Period (seconds)")
+        #ax.set_ylabel("")
+        fig3.suptitle(title+": Spectral Density" )
+        fig3.plot(periods,powerSpec, '+')
+        plt.show()
+
 def doStuff() :
     global inputFiles
     global shiftOffset
@@ -520,6 +546,7 @@ parser.add_argument('--shiftOffset', '-s', nargs='?', default=0.0, help='shift t
 parser.add_argument('--importLimit', '-L', nargs='?', default=100000000, help='limit imported data to the first <limit> lines')
 parser.add_argument('--outputPrefix', nargs='?', default=False, help='Save the results of the applised xPPSOffset corrections to a series of files with this name prefix')
 parser.add_argument('--frequency', '-F', action='store_true',default=False, help='Calculate Frequency Departure of all time series analysed')
+parser.add_argument('--fft', '-S', action='store_true',default=False, help='Calculate Spectral Density (Fourier Transform) of any time series')
 args = parser.parse_args()
 inputFiles = args.fileList
 description = args.desc
@@ -532,6 +559,7 @@ importLimit = int(args.importLimit)
 shiftOffset = float(args.shiftOffset)
 storeFilePrefix = args.outputPrefix
 doFreq = args.frequency
+doFT = args.fft
 
 ## Other Defaults
 storeFileCount=1
