@@ -6,6 +6,20 @@ Some sample python scripts.
 * sbf2offset.py : Pulls xPPSOffset data from SBF format files (requires pysbf)
 * analyseTIC.py : Quick analysis of TIC data.  Produces several plots, applies 
 xPPSOffset corrections
+* mkRINEX+CGGTTS.sh : Processes SBF data files into RINEX and CGGTTS format files.
+Plus, it also extracts and stores xPPSOffset blocks and PVTGeodetic blocks, too.
+All output data is organized in to ../ptdata/organizedData/ directory.
+* sbf2offset.py : helper script that extracts xPPSOffset SBF data blocks.
+* sbf2PVTGeo.py : helper script that extracts PVTGeodetic SBF data blocks.
+* getTravTempLog.py : script to retrieve temperature data from the Traveler Box
+temperature controller
+* mkCLKns.sh : script to extract CLK(ns) (aka rx_clk_ns) data from CSRS-PP result
+.zip files.
+* getCorrData.sh : script to gather all correction data in to one file for a
+specified set of source files.  Correction data is xPPSOffset, rxClkBias (from
+PVTGeo blocks), and rx_clk_ns data (from CSRS data).  Requires data extracted
+using the preceding three helper scripts.  This script iterates over all four
+receivers and produces one file for each containing just receiver data.
 
 *All scripts require Python 2.7*
 

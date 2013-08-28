@@ -14,6 +14,7 @@ clobber="yes"
 rebuild="no"
 dryrun="no"
 logLevel=3
+leapSecs=16
 tmpFile='${posFile}.tmp${$}'
 
 function logMsg() {
@@ -54,7 +55,7 @@ function doit() {
     logMsg "DEBUG: extrating data to tempfile: ${tmp}"
     if [ "no" = "${dryrun}" ]; then {
       unzip "${file}" "${tgtFileGlob}"
-      tail --lines=+9 ${posFile} | awk 'BEGIN{print "utc,rx_clk_ns"};{utc=substr($5"T"$6,1,19); print utc","$14}' > "${tmp}"
+      tail --lines=+9 ${posFile} | TZ=UTC LEAP=$leapSecs awk 'BEGIN{leaps=ENVIRON["LEAP"]; print "utc,rx_clk_ns"};{date=$5;time=$6;gsub("-"," ",date);gsub(":"," ",time);gnss=mktime(sprintf("%s %s -1",date,time))-leaps; print strftime("%Y-%m-%dT%H:%M:%S",gnss)","$14}' > "${tmp}"
       local yr=$(head --lines=2 "${tmp}" |tail --lines=1 | cut -c1-4)
       local id=$(echo "${tmp}" | cut -c1-4 | tr '[:lower:]' '[:upper:]' )
       local day=$(echo "${tmp}" | cut -c5-7)
