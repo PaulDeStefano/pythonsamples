@@ -21,6 +21,7 @@
 import pysbf
 import argparse
 from datetime import datetime
+from sys import stderr
 
 # this is the UNIX time (epoch 1/1/1970) of the start of GNSS epoch (1/6/1980)
 #GNSSepochInUNIXepoch = 315964819
@@ -63,7 +64,7 @@ class t2kSeptTime:
         elif timeScale == 2:
             # UTC timestamps on SBF blocks
             #print("DEBUG: SBF block uses UTC timescale")
-            raise Exception("SBF block uses UTC.  implimentation not yet verifyed.")
+            raise Exception("ERROR: SBF block uses UTC.  implimentation not yet verifyed.")
             #TODO : I had better check this.
             epochDiffNow = float( GNSSepochInUNIXepoch )
         else:
@@ -103,14 +104,20 @@ def doStuff(f) :
 
     #print('do stuff on file '+f+'...\n')
     with open(f,'r') as sbf_fobj:
-      #for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'},limit=10):
-      for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'}):
-        rcvrTime = t2kSeptTime(WNc=block['WNc'], TOW=block['TOW'], timeScale=block['Timescale'])
-        offset=block['Offset']
-        iso8601, unixtime, WNc, TOW, jd, mjd, dayOfYear = rcvrTime.getTuple()
-        print("{},{},{},{},{},{},{},{}".format(
-                iso8601, round(offset, 3), unixtime,
-                WNc, TOW, jd, mjd, dayOfYear))
+        for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'}):
+            WNc=block['WNc']
+            TOW=block['TOW']
+            timeScale=block['Timescale']
+            offset=block['Offset']
+            try:
+                rcvrTime = t2kSeptTime(WNc,TOW,timeScale)
+            except Exception as e:
+                stderr.write(str(e)+', skipping block (WNc={},TOW={})'.format(WNc,TOW)+'\n')
+                continue
+            iso8601, unixtime, WNc, TOW, jd, mjd, dayOfYear = rcvrTime.getTuple()
+            print("{},{},{},{},{},{},{},{}".format(
+                    iso8601, round(offset, 3), unixtime,
+                    WNc, TOW, jd, mjd, dayOfYear))
 
 if __name__ == "__main__" :
     #print('hi\n')
@@ -135,12 +142,17 @@ TOW = number of miliseconds since start of the current week
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')
     #parser.add_argument('--outfile',nargs='?',help='output file')
+    parser.add_argument('--header',action='store_true',default=True,help='produce column description strings as first line of output (default)')
+    parser.add_argument('--noheader',dest='header',action='store_false',default=True,help='omit header at beginning of output')
     args = parser.parse_args()
     #print(args.fileList)
     fileList = args.fileList
     #outfile = args.outfile
     #print('working on files:'+str(fileList)+'\n')
+    header = args.header
 
+    if (header):
+        print 'ISO_Date,xPPSOffset,UNIX_time,WNc,TOW,julianDay,mjd'
     for f in fileList :
         #print('working on file: '+f)
         doStuff(f)
