@@ -53,13 +53,12 @@ class t2kSeptPVTTime:
         elif timeSystem == 1:
             # GLONASS timestamps on SBF blocks
             #print("DEBUG: SBF block uses UTC timeSystem")
-            raise Exception("SBF block uses GLONASS time, not yet implimented.")
+            raise Exception("ERROR: SBF block uses GLONASS time, not yet implimented.")
         elif timeSystem == 255 :
             # GLONASS timestamps on SBF blocks
-            #raise Exception("ERROR: SBF block has error TimeSystem: 255")
-            raise t2kSBFDataError
+            raise t2kSBFDataError("ERROR: SBF block has error code for TimeSystem value: 255")
         else:
-            raise Exception("ERROR: SBF timeSystem unrecognized: {}".format(timeSystem) )
+            raise t2kSBFDataError("ERROR: SBF timeSystem unrecognized: {}".format(timeSystem) )
 
         self.error = 0
         self.WNc=WNc
@@ -96,11 +95,6 @@ def doStuff(f) :
     with open(f,'r') as sbf_fobj:
       #for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'},limit=10):
       for blockName, block in pysbf.load(sbf_fobj, blocknames={'PVTGeodetic_v2'}):
-        try:
-            rcvrTime = t2kSeptPVTTime(WNc=block['WNc'], TOW=block['TOW'], timeSystem=block['TimeSystem'])
-        except t2kSBFDataError as e:
-            stderr.write("ERROR: bad data found in PVTGeo block\n")
-            continue
         errCode=block['Error']
         phi=block['Phi']
         lmbd=block['Lambda']
@@ -111,6 +105,16 @@ def doStuff(f) :
         mode=block['Mode']
         signalInfo=block['SignalInfo']
         alertFlag=block['AlertFlag']
+        WNc=block['WNc']
+        TOW=block['TOW']
+        timeSystem=block['TimeSystem']
+        try:
+            if (errCode > 0):
+                raise t2kSBFDataError('WARNING: Unknown block error code: {}'.format(errCode))
+            rcvrTime = t2kSeptPVTTime(WNc,TOW,timeSystem)
+        except t2kSBFDataError as e:
+            stderr.write(str(e)+', skipping block (WNc={},TOW={},NrSV={},SignalInfo={},AlertFlag={})'.format(errCode,WNc,TOW,nrSV,signalInfo,alertFlag )+'\n')
+            continue
         iso8601, unixtime, WNc, TOW, jd, mjd, dayOfYear = rcvrTime.getTuple()
         print("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}".format(
                 iso8601, unixtime,
@@ -145,7 +149,7 @@ TOW = number of miliseconds since start of the current week
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')
     #parser.add_argument('--outfile',nargs='?',help='output file')
     parser.add_argument('--header',action='store_true',default=True,help='produce column description strings as first line of output (default)')
-    parser.add_argument('--noheader',action='store_false',default=False,help='omit header at beginning of output')
+    parser.add_argument('--noheader',dest='header',action='store_false',default=True,help='omit header at beginning of output')
     args = parser.parse_args()
     #print(args.fileList)
     fileList = args.fileList
@@ -154,7 +158,7 @@ TOW = number of miliseconds since start of the current week
     #print('working on files:'+str(fileList)+'\n')
 
     if (header):
-        print '#ISO_Date,UNIX_time,SBFblkErrCode,phi,lambda,height,rxClkBias,rxClkDrift,nrSV,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,Mode,SignalInfo,AlertFlag'
+        print 'ISO_Date,UNIX_time,SBFblkErrCode,phi,lambda,height,rxClkBias,rxClkDrift,nrSV,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,Mode,SignalInfo,AlertFlag'
     for f in fileList :
         #print('working on file: '+f)
         doStuff(f)
