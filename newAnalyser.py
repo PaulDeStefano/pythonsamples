@@ -35,13 +35,13 @@ def logMsg(s, *args):
 class tofAnalayser:
     """Draft Implimentation of TOF Data Analyser Module"""
     release = releaseName = '2013.09.01'
-    formatDict = { 'ticFinal' : 'iso8601 dT ignore ignore' 
-            , 'ticFinal.full' : 'iso8601 dT unixtime nsec' 
-            , 'getCorrData' : 'iso8601,xPPSOffset,rxClkBias,rx_clk_ns' 
-            , 'getCorrData' : 'iso8601,xPPSOffset,rxClkBias,rx_clk_ns' 
-            , 'xPPSOffset.dat' : 'iso8601,xPPSOffset,unixtime,ignore,ignore,ignore,ignore,ignore' 
-            , 'xPPSOffset.dat.full' : 'iso8601,xPPSOffset,unixtime,ignore,ignore,ignore,ignore,ignore' 
-            , 'master' : 'iso8601,dT,xPPSOffset,rxClkBias,rx_clk_ns' 
+    formatDict = { 'ticFinal'   : 'iso8601 dT ignore ignore' 
+            , 'ticFinal.full'   : 'iso8601 dT unixtime nsec' 
+            , 'getCorrData'     : 'iso8601,ignore,xPPSOffset,rxClkBias,rx_clk_ns' 
+            , 'getCorrData.full': 'iso8601,unixtime,xPPSOffset,rxClkBias,rx_clk_ns' 
+            , 'xPPSOffset'      : 'iso8601,xPPSOffset,ignore,ignore,ignore,ignore,ignore,ignore' 
+            , 'xPPSOffset.full' : 'iso8601,xPPSOffset,unixtime,ignore,ignore,ignore,ignore,ignore' 
+            , 'master'          : 'iso8601,dT,xPPSOffset,rxClkBias,rx_clk_ns,dT_ns,rxClkBias_ns,PPCorr,dTPPCorr' 
             }
     formatDict['default'] = formatDict['ticFinal']
     optionsDict = {}
@@ -82,8 +82,8 @@ class tofAnalayser:
         parser.add_argument('--corr', '-C', nargs='?', help='File continating "correction" values (from getCorrData.sh)')
         parser.add_argument('--showFormats', action='store_true', default=False, help='Show a list of known formats')
 
-        self.args = parser.parse_args()
-        args = self.args
+        self.options = parser.parse_args()
+        args = self.options
 
         optionsDict = self.optionsDict
         optionsDict['inputFiles'] = args.fileList
@@ -113,13 +113,19 @@ class tofAnalayser:
         logMsg('DEBUG: addData: dataFrame:\n',dataFrame.describe())
         if None == loc:
             raise Exception('ERROR: addData: cannot work with loc=None')
-        db = self.dbDict[loc].append(dataFrame)
+        db = pandas.merge(
+                self.dbDict[loc],dataFrame
+                ,how='outer'
+                ,left_index=True, right_index=True
+                ,copy=True
+                )
         self.dbDict[loc] = db
         logMsg('DEBUG: addData...done')
         logMsg(self.dbDict[loc].describe())
+        logMsg(self.dbDict[loc])
 
-    def mergeData(self, dataFrame, loc):
-        pandas.merge(self.db,dataFrame,how='inner')
+    #def mergeData(self, dataFrame, loc):
+    #    return pandas.merge(self.db,dataFrame,how='inner')
 
     def decodeFileName(self,s):
         l = s.split(':')
@@ -140,7 +146,6 @@ class tofAnalayser:
                 #newData = self._loadFile(filename=fileName,fmt = self.formatDict['default'])
                 newData = self._loadFile(f,loc,fmt)
                 #newData.tz_localize('UTC')
-                newData = self.cleanUpData(newData)
                 self.addData(newData, loc=loc)
 
         else:
@@ -167,23 +172,23 @@ class tofAnalayser:
     def _loadFile(self, filename, loc, fmt='default' ):
         logMsg('NOTICE: _loadFile: loading file:',filename,'...' )
         fmt=self._getFormat(fmt)
-        logMsg('DEBUG: _loadFile: using format:', fmt )
+        #logMsg('DEBUG: _loadFile: using format:', fmt )
 
         delim_whitespace = False
         names = None
         if re.search('\s', fmt):
             '''whitespace delimited format'''
-            logMsg('DEBUG: _loadFile: using whitespace as delimiter to read file')
+            #logMsg('DEBUG: _loadFile: using whitespace as delimiter to read file')
             delim_whitespace=True
             names=fmt.split(' ')
         else:
-            logMsg('DEBUG: _loadFile: using comma as delimiter to read file')
+            #logMsg('DEBUG: _loadFile: using comma as delimiter to read file')
             names=fmt.split(',')
 
         '''filter ignore columns'''
         usecols = [ name for name in names if name != 'ignore' ]
-        logMsg('DEBUG: _loadFile: names:',names)
-        logMsg('DEBUG: _loadFile: usecols:',usecols)
+        #logMsg('DEBUG: _loadFile: names:',names)
+        #logMsg('DEBUG: _loadFile: usecols:',usecols)
 
         newData = pandas.read_csv(filename
                 ,index_col=0, parse_dates=True
@@ -203,15 +208,55 @@ class tofAnalayser:
     def preview(self):
         logMsg('DEBUG: previewing...')
         logMsg('DEBUG: ', self.dbDict.keys() )
-        for key in self.dbDict.keys():
-            logMsg('DEBUG: preview: loc=',key,'\n', self.dbDict[key].describe() )
-            #logMsg('DEBUG: preview: loc=',key,'\n', self.dbDict[key].head() )
-            previewDF = self.dbDict[key]
-            previewDF = previewDF['dT'].head(1000)
+        for loc in self.dbDict.keys():
+            logMsg('DEBUG: preview: loc=',loc,'\n', self.dbDict[loc].describe() )
+            #logMsg('DEBUG: preview: loc=',loc,'\n', self.dbDict[loc].head() )
+            previewDF = self.dbDict[loc]
+            print previewDF.head(10)
+            print previewDF.tail(10)
+            previewDF.plot()
             plt.show()
 
-
         logMsg('DEBUG: previewing...done')
+
+    def prep(self):
+        '''fix up stuff before other calculations'''
+        '''dT is in seconds, but we're interested in nanosecond level differences.
+        And, besides, it will be easiest to convert to a common unit.'''
+        db = self.dbDict
+        for loc in db.keys():
+            dat = self.dbDict[loc]
+            '''convert dT to ns'''
+            if 'dT' in dat.keys():
+                dat['dT_ns'] = dat.dT * 1E9
+
+            '''convert rxClkBias to ns'''
+            if 'rxClkBias' in dat.keys():
+                dat['rxClkBias_ns'] = dat['rxClkBias'] * 1E6
+
+    def doXPPScorr(self):
+        logMsg('DEBUG: xPPScorr...')
+# apply xppsoffset
+        for loc in self.dbDict.keys():
+            db = self.dbDict[loc]
+            if ('dT_ns' not in db.keys()) or ('xPPSOffset' not in db.keys()):
+                raise Exception("Data needed for xPPSOffset corrections not found")
+            dat = self.dbDict[loc]
+            dat['dTCorr'] = dat.dT_ns + self.options.negOffset * dat.xPPSOffset 
+            dat[:,['dT_ns','dTCorr']].plot()
+            plt.show()
+        logMsg('DEBUG: xPPScorr...done')
+
+    def doPPPcorr(self):
+# find PPP Correction & apply
+        logMsg('DEBUG: PPCorr...')
+        for loc in self.dbDict.keys():
+            dat = self.dbDict[loc]
+            dat['PPCorr'] = dat.rxClkBias - dat.rx_clk_ns
+            dat['dTPPCorr'] = dat.dT_ns - dat.PPCorr
+            dat[:,['dT_ns','PPCorr','dTPPCorr']].plot()
+            plt.show()
+        logMsg('DEBUG: PPCorr...done')
 
 ## MAIN ##
 def runMain():
@@ -222,10 +267,17 @@ def runMain():
     tof.loadData()
 # preview
     tof.preview()
-# import correcitions
 # organize data
+    tof.prep()
+    tof.preview()
+# import correcitions
+    tof.doXPPScorr()
+    tof.preview()
 # apply corrections
+    tof.doPPPcorr()
+    tof.preview()
 # analyse data
+    #tof.analyse()
 # overview plot
 # store analysed data
 # find sub-series
@@ -237,4 +289,7 @@ def runMain():
 #rc('text', usetex=True)
 
 if __name__ == "__main__" :
-    runMain()
+    try:
+        runMain()
+    except KeyboardInterrupt as e:
+        '''relax, exit but supress traceback'''
