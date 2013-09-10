@@ -26,17 +26,38 @@ import matplotlib.pyplot as plt
 
 # use tex to format text in matplotlib
 #rc('text', usetex=True)
-mpl.rc('figure'
-        ,dpi=100 )
-mpl.rc('axes'
-        ,grid=True)
+mpl.rcParams['figure.figsize'] = (12,8)
+mpl.rcParams['figure.facecolor'] = '0.5'
+mpl.rcParams['figure.dpi'] = 100
+mpl.rcParams['figure.subplot.left'] = 0.08
+mpl.rcParams['figure.subplot.right'] = 0.96
+mpl.rcParams['figure.subplot.bottom'] = 0.02
+mpl.rcParams['figure.subplot.top'] = 0.96 
+mpl.rcParams['grid.alpha'] = 0.6
+mpl.rcParams['axes.grid'] = True
+mpl.rcParams['axes.facecolor'] = '0.75'
 mpl.rc('lines'
         ,linestyle=None
-        ,marker='+')
+        ,marker='+'
+        ,markersize=2
+        ,antialiased=True
+        )
+mpl.rc('font'
+        ,size=9 )
+mpl.rc('legend'
+        ,markerscale=2.0
+        ,fontsize='small')
+mpl.rc('text'
+        ,usetex=False )
 mpl.rc('xtick'
+        ,labelsize='medium'
         ,direction='out' )
 mpl.rc('ytick'
+        ,labelsize='medium'
         ,direction='out' )
+
+# disable sparse x ticks, doesn't work
+#pandas.plot_params.use('x_comapt',True)
 
 def logMsg(s, *args):
     #print("DEBUG: logMsg called")
@@ -46,6 +67,11 @@ def logMsg(s, *args):
     print >> sys.stderr , str(s)
     #print(str(s),file=sys.stderr) # python3
 
+def headtail(dataFrame):
+    '''wraper for previews of dataframes'''
+    h = dataFrame.head(2)
+    t = dataFrame.tail(2)
+    return str(h)+str(t)
 
 class tofAnalayser:
     """Draft Implimentation of TOF Data Analyser Module"""
@@ -73,6 +99,31 @@ class tofAnalayser:
             , 'sk' : pandas.DataFrame()
             }
 
+    colorMap =  {
+                'dT' : 'red'
+                ,'dT_ns' : 'red'
+                ,'dTCorr' : 'green'
+                ,'xPPSOffset': 'grey'
+                ,'rxClkBias_ns': 'blue'
+                ,'rx_clk_ns': 'magenta'
+                ,'PPCorr' : 'yellow'
+                ,'dTPPCorr' : 'cyan'
+                }
+    styleMap =  {
+                'dT' : 'rx'
+                ,'dT_ns' : 'r+'
+                ,'dTCorr' : 'g+'
+                ,'xPPSOffset': 'g+'
+                ,'rxClkBias': 'bx'
+                ,'rxClkBias_ns': 'b+'
+                ,'rx_clk_ns': 'm+'
+                ,'dTPPCorr' : 'c+'
+                ,'PPCorr' : 'y+'
+                }
+
+    def locations(self):
+        return self.dbDict.keys()
+
     def __init__(self, argv=None):
         if argv:
             self.configure(argv)
@@ -89,14 +140,18 @@ class tofAnalayser:
         parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='Boolean.  Add offset values to TIC measurements (dT)')
         parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='Boolean. Subtract offset values from TIC measurements (dT)')
         parser.add_argument('--histbins', nargs='?', default=50, help='Number of bins in histograms')
-        parser.add_argument('--shiftOffset', '-s', nargs='?', default=0.0, help='shift time of xPPSOffset corrections wrt. TIC measurements by this many seconds')
+        parser.add_argument('--shiftOffset', '-s', nargs='?', default=0, help='shift time of xPPSOffset corrections wrt. TIC measurements by this many seconds')
         parser.add_argument('--importLimit', '-L', nargs='?', default=100000000, help='limit imported data to the first <limit> lines')
-        parser.add_argument('--outputPrefix', nargs='?', default=False, help='Save the results of the applised xPPSOffset corrections to a series of files with this name prefix')
+        parser.add_argument('--outputPrefix', nargs='?', default=False, help='Save the results of the applied xPPSOffset corrections to a series of files with this name prefix')
         parser.add_argument('--frequency', '-F', action='store_true',default=False, help='Calculate Frequency Departure of all time series analysed')
         parser.add_argument('--fft', '-S', action='store_true',default=False, help='Calculate Spectral Density (Fourier Transform) of any time series')
         parser.add_argument('--corr', '-C', nargs='?', help='File continating "correction" values (from getCorrData.sh)')
         parser.add_argument('--showFormats', action='store_true', default=False, help='Show a list of known formats')
         parser.add_argument('--loadSaved', nargs='?', default=False, help='Load a previously saved data set from this file')
+        parser.add_argument('--forceReProcess', action='store_true', default=False, help='Froce reprocessing of data loaded from saved data files')
+        parser.add_argument('--hdf5', action='store_true', default=True, help='Use HDF5 file format to store data')
+        parser.add_argument('--csv', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
+        parser.add_argument('--debug', action='store_true', default=True, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
 
         self.options = parser.parse_args()
         args = self.options
@@ -108,7 +163,7 @@ class tofAnalayser:
         optionsDict['offsetFile'] = args.offsets
         optionsDict['negOffset'] = args.negOffset
         optionsDict['numBins'] = int(args.histbins)
-        optionsDict['shiftOffset'] = float(args.shiftOffset)
+        optionsDict['shiftOffset'] = args.shiftOffset
         optionsDict['importLimit'] = int(args.importLimit)
         optionsDict['storeFilePrefix'] = args.outputPrefix
         optionsDict['doFreq'] = args.frequency
@@ -116,10 +171,23 @@ class tofAnalayser:
         optionsDict['corr'] = args.offsets
         optionsDict['showFormats'] = args.showFormats
         optionsDict['loadSaved'] = args.loadSaved
+        optionsDict['forceReProcess'] = args.forceReProcess
+        optionsDict['debug'] = args.debug
 
         ''' we may not always want to do the same calcuations.  If data has been
         loaded from stored data file, then some processing can be skipped.'''
         optionsDict['reProcess'] = True
+        optionsDict['colorMap'] = {
+                'dT' : 'red'
+                ,'dTCorr' : 'green'
+                ,'xPPSOffset': 'grey'
+                ,'rxClkBias_ns': 'blue'
+                ,'rx_clk_ns': 'magenta'
+                ,'dTPPCorr' : 'cyan'
+                }
+
+        '''allow different shift values per location'''
+        self.parseDictOption( 'shiftMap',self.options.shiftOffset,delim2='=' )
 
         logMsg('DEBUG: harvested coniguration:',optionsDict)
 
@@ -128,6 +196,27 @@ class tofAnalayser:
                 print(fmt)
 
 #print("DEBUG: negOffset:" + str(negOffset) )
+
+    def parseDictOption( self,key,s,delim2=':',cast=lambda x: int(x) ):
+        self.optionsDict[key] = self.strToDict(s,delim2=delim2,cast=cast)
+
+    def strToDict(self,s,default=0,delim1=',',delim2=':',cast=lambda x: int(x) ):
+        logMsg("DEBUG: strToDict ...")
+        if type(s) == type(int()) :
+            default = s
+            s = 'all='+str(default)
+        groups = s.split(delim1)
+        d = {}
+        for loc in self.locations():
+            v = default
+            for name,val in [x.split(delim2) for x in groups ]:
+                if loc == name or loc == 'all':
+                    v = cast(val)
+                elif name not in self.locations() and name != 'all' :
+                    raise Exception( "ERROR: cannot unpack string:",s,", location:",loc," doesn't match locations in ",self.locations() )
+            d[loc] = v
+        logMsg("DEBUG: strToDict ...done")
+        return d
 
     def addData(self, dataFrame, loc):
         logMsg('DEBUG: addData...')
@@ -159,7 +248,8 @@ class tofAnalayser:
         optionsDict = self.optionsDict
         if self.options.loadSaved :
             self.__loadSaved()
-            self.optionsDict['reProcess'] = False
+            if not self.options.forceReProcess:
+                self.optionsDict['reProcess'] = False
             logMsg("DEBUG: reProcess: ",self.optionsDict['reProcess'])
 
         logMsg("DEBUG: intputFiles: ",self.optionsDict['inputFiles'])
@@ -239,6 +329,22 @@ class tofAnalayser:
             raise Exception('ERROR: load of file {} failed for unknown reason'.format(filename) )
         return newData
 
+    def __previewDF(self,previewDF, title=None,debug=False, **kwargs):
+        if debug and not self.options.debug:
+            return
+        logMsg("DEBUG: previewDF ...")
+        if None == title:
+            title=self.options.desc
+        print previewDF.head(2)
+        print previewDF.tail(2)
+        #previewDF.plot(grid=True,title='Preview:'+title)
+        #for key in previewDF.keys():
+        #    previewDF[key].plot(style=self.styleMap[key])
+        previewDF.plot(subplots=True,grid=True)
+        plt.suptitle('Preview:'+title)
+        plt.show()
+        logMsg("DEBUG: previewDF ...done")
+
     def preview(self):
         logMsg('DEBUG: previewing...')
         logMsg('DEBUG: ', self.dbDict.keys() )
@@ -249,11 +355,7 @@ class tofAnalayser:
                 continue
             logMsg('DEBUG: preview: loc=',loc,'\n', dat.describe() )
             #logMsg('DEBUG: preview: loc=',loc,'\n', self.dbDict[loc].head() )
-            previewDF = dat
-            print previewDF.head(10)
-            print previewDF.tail(10)
-            previewDF.plot(title=loc+':'+self.options.desc)
-            plt.show()
+            self.__previewDF(dat,title=loc)
 
         logMsg('DEBUG: previewing...done')
 
@@ -263,6 +365,7 @@ class tofAnalayser:
         And, besides, it will be easiest to convert to a common unit.'''
         if not self.optionsDict['reProcess'] :
             ''' skip this stuff'''
+            logMsg("DEBUG: prep: reprocessing disabled, skipping")
             return None
 
         for loc in self.dbDict.keys():
@@ -285,9 +388,16 @@ class tofAnalayser:
             if 'rxClkBias' in dat.keys():
                 dat['rxClkBias_ns'] = dat['rxClkBias'] * 1E6
 
+        '''drop unusable values'''
+        for loc in self.dbDict.keys():
+            dat = self.dbDict[loc]
+            self.dbDict[loc] = dat.dropna(how='any')
+            logMsg("DEBUG: after dropna:",dat)
+
     def doXPPScorr(self):
         logMsg("DEBUG: reProcess: ",self.optionsDict['reProcess'])
         if not self.optionsDict['reProcess'] :
+            logMsg("DEBUG: doXPPScorr: reprocessing disabled, skipping")
             return None
 
         logMsg('DEBUG: xPPScorr...')
@@ -302,14 +412,17 @@ class tofAnalayser:
             coeff = -1
             if not self.options.negOffset:
                 coeff = 1
-            dat['dTCorr'] = dat.dT_ns + coeff * dat.xPPSOffset 
-            dat[['dT_ns','dTCorr']].plot(title=loc+':'+self.options.desc,grid=True)
+            shiftVal = self.optionsDict['shiftMap'][loc]
+            logMsg("DEBUG: using shift value:",shiftVal)
+            dat['dTCorr'] = dat.dT_ns.shift(shiftVal) + coeff * dat.xPPSOffset 
+            dat[['dT_ns','dTCorr','xPPSOffset']].plot(title=loc+':'+self.options.desc,grid=True)
             plt.show()
         logMsg('DEBUG: xPPScorr...done')
 
     def doPPPcorr(self):
 # find PPP Correction & apply
         if not self.optionsDict['reProcess'] :
+            logMsg("DEBUG: doPPPCorr: reprocessing disabled, skipping")
             return None
 
         logMsg('DEBUG: PPCorr...')
@@ -323,17 +436,19 @@ class tofAnalayser:
             logMsg("DEBUG: loc:",loc,":",dat)
             dat['PPCorr'] = dat.rxClkBias_ns - dat.rx_clk_ns
             dat['dTPPCorr'] = dat.dTCorr - dat.PPCorr
-            dat[['dT_ns','PPCorr','dTPPCorr']].plot(title=loc+':'+self.options.desc)
-            plt.show()
+
+            self.__previewDF(dat[['dT_ns','PPCorr','dTPPCorr']],title=loc,debug=True)
+
         logMsg('DEBUG: PPCorr...done')
 
     def save(self):
         logMsg('DEBUG: saving database to file...')
         fileName = self.options.outputPrefix
         if fileName:
+            fileName += '.hdf5'
             logMsg("DEBUG: saving to HDF5 store in file",fileName)
         #with pandas.HDFStore(fileName+'.hdf5') as store:
-            store = pandas.HDFStore(fileName+'.hdf5')
+            store = pandas.HDFStore(fileName)
             for loc in self.dbDict.keys():
                 store[loc] = self.dbDict[loc]
             store.close()
@@ -357,12 +472,55 @@ class tofAnalayser:
         else:
             logMsg("DEBUG: couldn't load, no loadSaved file specified")
 
+
+    def plotType1(self, dataFrame):
+        logMsg('DEBUG: plotType1...')
+        plt.figure()
+        for key in dataFrame.keys():
+            dataFrame[key].plot(grid=True,style=tofAnalayser.styleMap[key])
+        plt.show()
+        logMsg('DEBUG: done...')
+
+    def viewBasic(self):
+        '''gather data from different locations into one plot'''
+        logMsg('DEBUG: viewBasic...')
+        df = pandas.DataFrame()
+        for name in ('dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr'):
+            allValList = []
+            allValKeys = []
+            logMsg("DEBUG: viewBasic: working on values: ",name)
+            for loc in self.dbDict.keys():
+                dat = self.dbDict[loc]
+                #self.__previewDF(dat,title=loc)
+                logMsg("DEBUG: viewBasic: combining loc:",loc," name:",name)
+                seq = dat[name]
+                #seq.plot()
+                #plt.show()
+                logMsg("DEBUG: viewBasic: got sequence:",headtail(seq))
+                allValList.append(seq)
+                allValKeys.append(loc)
+            #logMsg("DEBUG: viewBasic: concatenating all of name",name,"list:",allValList )
+            newSeq = pandas.concat(allValList,allValKeys)
+            logMsg("DEBUG: viewBasic: new concat seq newSeq:",newSeq )
+            logMsg("DEBUG: viewBasic: new concat seq levels:",newSeq.columns.levels )
+            logMsg("DEBUG: viewBasic: describe new concat seq newSeq:",newSeq.describe() )
+            newSeq.plot(title='debug:'+name)
+            plt.show()
+            newDF = pandas.DataFrame(newSeq)
+            newDF.plot(title='debug:'+name)
+            plt.show()
+            logMsg("DEBUG: viewBasic: describe new concat df[name]:",df[name].describe() )
+            logMsg("DEBUG: viewBasic: describe new concat df[name]:",df[name].describe() )
+            logMsg("DEBUG: viewBasic: describe new concat df:",df.describe() )
+            df[name].plot()
+            plt.show()
+        self.plotType1(df) 
+        #del df
+        logMsg('DEBUG: viewBasic...done')
+
     def analyse(self):
         logMsg('DEBUG: Analyse...')
-        for loc in self.dbDict.keys():
-            dat = self.dbDict[loc]
-            dat = dat.dropna(how='any')
-            logMsg("DEBUG: after dropna:",dat)
+        self.viewBasic()
         logMsg('DEBUG: Analyse...done')
 
 ## MAIN ##
@@ -386,8 +544,8 @@ def runMain():
 # store analysed data
     tof.save()
 # analyse data
+    #tof.preview()
     tof.analyse()
-    tof.preview()
 # store analysed data
     tof.save()
 # overview plot
