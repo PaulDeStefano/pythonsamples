@@ -23,23 +23,26 @@ import pandas
 import re
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import copy
+import matplotlib.dates as mdates
+from matplotlib.ticker import AutoMinorLocator
 
 # use tex to format text in matplotlib
 #rc('text', usetex=True)
-mpl.rcParams['figure.figsize'] = (12,8)
-mpl.rcParams['figure.facecolor'] = '0.5'
+mpl.rcParams['figure.figsize'] = (14,9)
+mpl.rcParams['figure.facecolor'] = '0.75'
 mpl.rcParams['figure.dpi'] = 100
 mpl.rcParams['figure.subplot.left'] = 0.08
+mpl.rcParams['figure.subplot.bottom'] = 0.08
 mpl.rcParams['figure.subplot.right'] = 0.96
-mpl.rcParams['figure.subplot.bottom'] = 0.02
 mpl.rcParams['figure.subplot.top'] = 0.96 
 mpl.rcParams['grid.alpha'] = 0.6
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['axes.facecolor'] = '0.75'
+mpl.rcParams['axes.facecolor'] = '0.80'
 mpl.rc('lines'
         ,linestyle=None
         ,marker='+'
-        ,markersize=2
+        ,markersize=3
         ,antialiased=True
         )
 mpl.rc('font'
@@ -57,7 +60,7 @@ mpl.rc('ytick'
         ,direction='out' )
 
 # disable sparse x ticks, doesn't work
-#pandas.plot_params.use('x_comapt',True)
+pandas.plot_params['x_compat'] = True
 
 def logMsg(s, *args):
     #print("DEBUG: logMsg called")
@@ -101,25 +104,39 @@ class tofAnalayser:
 
     colorMap =  {
                 'dT' : 'red'
-                ,'dT_ns' : 'red'
-                ,'dTCorr' : 'green'
+                ,'dT_ns' : 'darkred'
+                ,'dTCorr' : 'lightgreen'
                 ,'xPPSOffset': 'grey'
+                ,'rxClkBias': 'lightblue'
                 ,'rxClkBias_ns': 'blue'
                 ,'rx_clk_ns': 'magenta'
                 ,'PPCorr' : 'yellow'
                 ,'dTPPCorr' : 'cyan'
                 }
+    markerMap =  {
+                'dT' : 'x'
+                ,'dT_ns' : '+'
+                ,'dTCorr' : '+'
+                ,'xPPSOffset': '+'
+                ,'rxClkBias': '+'
+                ,'rxClkBias_ns': '+'
+                ,'rx_clk_ns': '+'
+                ,'PPCorr' : '+'
+                ,'dTPPCorr' : '+'
+                }
     styleMap =  {
                 'dT' : 'rx'
                 ,'dT_ns' : 'r+'
                 ,'dTCorr' : 'g+'
-                ,'xPPSOffset': 'g+'
+                ,'xPPSOffset': 'k+'
                 ,'rxClkBias': 'bx'
                 ,'rxClkBias_ns': 'b+'
                 ,'rx_clk_ns': 'm+'
-                ,'dTPPCorr' : 'c+'
                 ,'PPCorr' : 'y+'
+                ,'dTPPCorr' : 'c+'
                 }
+
+    dateFormatter = mdates.DateFormatter('%Y%m%dT%H:%M')
 
     def locations(self):
         return self.dbDict.keys()
@@ -177,14 +194,21 @@ class tofAnalayser:
         ''' we may not always want to do the same calcuations.  If data has been
         loaded from stored data file, then some processing can be skipped.'''
         optionsDict['reProcess'] = True
-        optionsDict['colorMap'] = {
-                'dT' : 'red'
-                ,'dTCorr' : 'green'
-                ,'xPPSOffset': 'grey'
-                ,'rxClkBias_ns': 'blue'
-                ,'rx_clk_ns': 'magenta'
-                ,'dTPPCorr' : 'cyan'
+        '''configure reusable color and style attributes for TOF data types'''
+        optionsDict['colorMap'] = self.colorMap
+        optionsDict['styleMap'] = self.styleMap
+        optionsDict['tofPlotPref'] = {
+                'color:sk'      : copy.copy(self.colorMap)
+                ,'color:nd280'  : copy.copy(self.colorMap)
+                ,'color:nu1'    : copy.copy(self.colorMap)
+                ,'style:sk'     : copy.copy(self.styleMap)
+                ,'style:nd280'  : copy.copy(self.styleMap)
+                ,'style:nu1'    : copy.copy(self.styleMap)
                 }
+        optionsDict['tofPlotPref']['color:sk']['dT_ns']     = 'red'
+        optionsDict['tofPlotPref']['color:nd280']['dT']     = 'red'
+        optionsDict['tofPlotPref']['style:sk']['dT']        = 'x'
+        optionsDict['tofPlotPref']['style:nd280']['dT_ns']  = 'x'
 
         '''allow different shift values per location'''
         self.parseDictOption( 'shiftMap',self.options.shiftOffset,delim2='=' )
@@ -479,43 +503,38 @@ class tofAnalayser:
         for key in dataFrame.keys():
             dataFrame[key].plot(grid=True,style=tofAnalayser.styleMap[key])
         plt.show()
-        logMsg('DEBUG: done...')
+        logMsg('DEBUG: plotType2: done...')
+
+    def plotType2(self, dataFrameDict):
+        logMsg('DEBUG: plotType2...')
+        fig = plt.figure()
+        axes = fig.gca()
+        axes.format_xdata = self.dateFormatter
+        for name in ('dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr'):
+            for loc in dataFrameDict.keys():
+                db = dataFrameDict[loc]
+                seq = db[name]
+                color = self.optionsDict['tofPlotPref']['color'+':'+loc][name]
+                label = '_nolegend_'
+                if loc == 'nu1':
+                    label = name
+                seq.plot(color=color,label=label)
+        title = self.optionsDict['description']
+        plt.suptitle(title)
+        plt.ylabel('dT (ns)')
+        axes.xaxis.set_minor_locator(AutoMinorLocator())
+        fig.subplots_adjust(bottom=0.08)
+        plt.legend().get_frame().set_alpha(0.8)
+        #ax = axes.get_xaxis()
+        #ay = axes.get_yaxis()
+
+        plt.show()
+        logMsg('DEBUG: plotType2: done...')
 
     def viewBasic(self):
         '''gather data from different locations into one plot'''
         logMsg('DEBUG: viewBasic...')
-        df = pandas.DataFrame()
-        for name in ('dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr'):
-            allValList = []
-            allValKeys = []
-            logMsg("DEBUG: viewBasic: working on values: ",name)
-            for loc in self.dbDict.keys():
-                dat = self.dbDict[loc]
-                #self.__previewDF(dat,title=loc)
-                logMsg("DEBUG: viewBasic: combining loc:",loc," name:",name)
-                seq = dat[name]
-                #seq.plot()
-                #plt.show()
-                logMsg("DEBUG: viewBasic: got sequence:",headtail(seq))
-                allValList.append(seq)
-                allValKeys.append(loc)
-            #logMsg("DEBUG: viewBasic: concatenating all of name",name,"list:",allValList )
-            newSeq = pandas.concat(allValList,allValKeys)
-            logMsg("DEBUG: viewBasic: new concat seq newSeq:",newSeq )
-            logMsg("DEBUG: viewBasic: new concat seq levels:",newSeq.columns.levels )
-            logMsg("DEBUG: viewBasic: describe new concat seq newSeq:",newSeq.describe() )
-            newSeq.plot(title='debug:'+name)
-            plt.show()
-            newDF = pandas.DataFrame(newSeq)
-            newDF.plot(title='debug:'+name)
-            plt.show()
-            logMsg("DEBUG: viewBasic: describe new concat df[name]:",df[name].describe() )
-            logMsg("DEBUG: viewBasic: describe new concat df[name]:",df[name].describe() )
-            logMsg("DEBUG: viewBasic: describe new concat df:",df.describe() )
-            df[name].plot()
-            plt.show()
-        self.plotType1(df) 
-        #del df
+        self.plotType2(self.dbDict)
         logMsg('DEBUG: viewBasic...done')
 
     def analyse(self):
