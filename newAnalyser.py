@@ -201,14 +201,14 @@ class tofAnalayser:
                 'color:sk'      : copy.copy(self.colorMap)
                 ,'color:nd280'  : copy.copy(self.colorMap)
                 ,'color:nu1'    : copy.copy(self.colorMap)
-                ,'style:sk'     : copy.copy(self.styleMap)
-                ,'style:nd280'  : copy.copy(self.styleMap)
-                ,'style:nu1'    : copy.copy(self.styleMap)
+                ,'marker:sk'     : copy.copy(self.markerMap)
+                ,'marker:nd280'  : copy.copy(self.markerMap)
+                ,'marker:nu1'    : copy.copy(self.markerMap)
                 }
         optionsDict['tofPlotPref']['color:sk']['dT_ns']     = 'red'
         optionsDict['tofPlotPref']['color:nd280']['dT']     = 'red'
-        optionsDict['tofPlotPref']['style:sk']['dT']        = 'x'
-        optionsDict['tofPlotPref']['style:nd280']['dT_ns']  = 'x'
+        optionsDict['tofPlotPref']['marker:sk']['dT']        = 'x'
+        optionsDict['tofPlotPref']['marker:nd280']['dT_ns']  = 'x'
 
         '''allow different shift values per location'''
         self.parseDictOption( 'shiftMap',self.options.shiftOffset,delim2='=' )
@@ -515,16 +515,17 @@ class tofAnalayser:
                 db = dataFrameDict[loc]
                 seq = db[name]
                 color = self.optionsDict['tofPlotPref']['color'+':'+loc][name]
+                marker = self.optionsDict['tofPlotPref']['marker'+':'+loc][name]
                 label = '_nolegend_'
                 if loc == 'nu1':
                     label = name
-                seq.plot(color=color,label=label)
+                seq.plot(color=color,marker=marker,label=label)
         title = self.optionsDict['description']
         plt.suptitle(title)
         plt.ylabel('dT (ns)')
         axes.xaxis.set_minor_locator(AutoMinorLocator())
         fig.subplots_adjust(bottom=0.08)
-        plt.legend().get_frame().set_alpha(0.8)
+        plt.legend(loc='best').get_frame().set_alpha(0.8)
         #ax = axes.get_xaxis()
         #ay = axes.get_yaxis()
 
