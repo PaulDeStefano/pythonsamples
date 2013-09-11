@@ -32,7 +32,8 @@ from matplotlib.ticker import AutoMinorLocator
 mpl.rcParams['figure.figsize'] = (14,9)
 mpl.rcParams['figure.facecolor'] = '0.75'
 mpl.rcParams['figure.dpi'] = 100
-mpl.rcParams['figure.subplot.left'] = 0.08
+#mpl.rcParams['figure.subplot.left'] = 0.06
+mpl.rcParams['figure.subplot.left'] = 0.07
 mpl.rcParams['figure.subplot.bottom'] = 0.08
 mpl.rcParams['figure.subplot.right'] = 0.96
 mpl.rcParams['figure.subplot.top'] = 0.96 
@@ -85,7 +86,7 @@ class tofAnalayser:
             , 'getCorrData.full': 'iso8601,unixtime,xPPSOffset,rxClkBias,rx_clk_ns' 
             , 'xPPSOffset'      : 'iso8601,xPPSOffset,ignore,ignore,ignore,ignore,ignore,ignore' 
             , 'xPPSOffset.full' : 'iso8601,xPPSOffset,unixtime,ignore,ignore,ignore,ignore,ignore' 
-            , 'master'          : 'iso8601,dT,xPPSOffset,rxClkBias,rx_clk_ns,dT_ns,rxClkBias_ns,PPCorr,dTPPCorr' 
+            , 'master'          : 'iso8601,dT,xPPSOffset,rxClkBias,rx_clk_ns,dT_ns,rxClkBias_ns,PPCorr,dTPPCorr,dTCorr_avg,dTPPCorr_avg' 
             }
     formatDict['default'] = formatDict['ticFinal']
     optionsDict = {}
@@ -112,6 +113,9 @@ class tofAnalayser:
                 ,'rx_clk_ns': 'magenta'
                 ,'PPCorr' : 'yellow'
                 ,'dTPPCorr' : 'cyan'
+                ,'dT-StnClkOff' : 'orange'
+                ,'dTCorr_avg' : 'lightgreen'
+                ,'dTPPCorr_avg' : 'cyan'
                 }
     markerMap =  {
                 'dT' : 'x'
@@ -123,6 +127,9 @@ class tofAnalayser:
                 ,'rx_clk_ns': '+'
                 ,'PPCorr' : '+'
                 ,'dTPPCorr' : '+'
+                ,'dT-StnClkOff' : '+'
+                ,'dTCorr_avg' : 'o'
+                ,'dTPPCorr_avg' : 'o'
                 }
     styleMap =  {
                 'dT' : 'rx'
@@ -134,6 +141,7 @@ class tofAnalayser:
                 ,'rx_clk_ns': 'm+'
                 ,'PPCorr' : 'y+'
                 ,'dTPPCorr' : 'c+'
+                ,'dT-StnClkOff' : 'o+'
                 }
 
     dateFormatter = mdates.DateFormatter('%Y%m%dT%H:%M')
@@ -168,7 +176,9 @@ class tofAnalayser:
         parser.add_argument('--forceReProcess', action='store_true', default=False, help='Froce reprocessing of data loaded from saved data files')
         parser.add_argument('--hdf5', action='store_true', default=True, help='Use HDF5 file format to store data')
         parser.add_argument('--csv', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
-        parser.add_argument('--debug', action='store_true', default=True, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
+        parser.add_argument('--debug', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
+        parser.add_argument('--avgWindow', default=1000, help='Calculate rolling average (of selected data) with specified window value' )
+        parser.add_argument('--resamplePlot', default='100S', help='Select sub-sample size for plotting selected data types' )
 
         self.options = parser.parse_args()
         args = self.options
@@ -190,6 +200,8 @@ class tofAnalayser:
         optionsDict['loadSaved'] = args.loadSaved
         optionsDict['forceReProcess'] = args.forceReProcess
         optionsDict['debug'] = args.debug
+        optionsDict['avgWindow'] = int(args.avgWindow)
+        optionsDict['resamplePlot'] = args.resamplePlot
 
         ''' we may not always want to do the same calcuations.  If data has been
         loaded from stored data file, then some processing can be skipped.'''
@@ -212,6 +224,13 @@ class tofAnalayser:
 
         '''allow different shift values per location'''
         self.parseDictOption( 'shiftMap',self.options.shiftOffset,delim2='=' )
+
+        '''When plotting, resample these datatypes only'''
+        masterFromatList = self.formatDict['master']
+        logMsg("DEBUG: configure: master formats:",masterFromatList )
+        resampleList = filter( lambda x: re.search('_avg', x) ,masterFromatList.split(',') )
+        logMsg("DEBUG: configure: resampleList:", resampleList )
+        optionsDict['resampleDataBeforePlotList'] = filter( lambda x: re.search('_avg', x) , resampleList )
 
         logMsg('DEBUG: harvested coniguration:',optionsDict)
 
@@ -364,8 +383,8 @@ class tofAnalayser:
         #previewDF.plot(grid=True,title='Preview:'+title)
         #for key in previewDF.keys():
         #    previewDF[key].plot(style=self.styleMap[key])
-        previewDF.plot(subplots=True,grid=True)
-        plt.suptitle('Preview:'+title)
+        previewDF.resample('10S').plot(subplots=True,grid=True)
+        plt.suptitle('Preview:'+title+'(downsampled)')
         plt.show()
         logMsg("DEBUG: previewDF ...done")
 
@@ -412,12 +431,6 @@ class tofAnalayser:
             if 'rxClkBias' in dat.keys():
                 dat['rxClkBias_ns'] = dat['rxClkBias'] * 1E6
 
-        '''drop unusable values'''
-        for loc in self.dbDict.keys():
-            dat = self.dbDict[loc]
-            self.dbDict[loc] = dat.dropna(how='any')
-            logMsg("DEBUG: after dropna:",dat)
-
     def doXPPScorr(self):
         logMsg("DEBUG: reProcess: ",self.optionsDict['reProcess'])
         if not self.optionsDict['reProcess'] :
@@ -439,8 +452,9 @@ class tofAnalayser:
             shiftVal = self.optionsDict['shiftMap'][loc]
             logMsg("DEBUG: using shift value:",shiftVal)
             dat['dTCorr'] = dat.dT_ns.shift(shiftVal) + coeff * dat.xPPSOffset 
-            dat[['dT_ns','dTCorr','xPPSOffset']].plot(title=loc+':'+self.options.desc,grid=True)
-            plt.show()
+            #dat[['dT_ns','dTCorr','xPPSOffset']].plot(title=loc+':'+self.options.desc,grid=True)
+            #plt.show()
+            self.__previewDF( dat[['dT_ns','dTCorr','xPPSOffset']] ,title='xPPSOffset:'+loc, debug=True)
         logMsg('DEBUG: xPPScorr...done')
 
     def doPPPcorr(self):
@@ -459,9 +473,10 @@ class tofAnalayser:
                 raise Exception("Data needed for PP corrections not found")
             logMsg("DEBUG: loc:",loc,":",dat)
             dat['PPCorr'] = dat.rxClkBias_ns - dat.rx_clk_ns
-            dat['dTPPCorr'] = dat.dTCorr - dat.PPCorr
+            dat['dTPPCorr'] = dat.dTCorr - dat.rxClkBias_ns + dat.rx_clk_ns
+            #dat['dT-StnClkOff'] = dat.dT_ns - dat.rx_clk_ns
 
-            self.__previewDF(dat[['dT_ns','PPCorr','dTPPCorr']],title=loc,debug=True)
+            self.__previewDF(dat[['dT_ns','PPCorr','dTPPCorr']],title='PPPCorrectoins:'+loc,debug=True)
 
         logMsg('DEBUG: PPCorr...done')
 
@@ -496,6 +511,84 @@ class tofAnalayser:
         else:
             logMsg("DEBUG: couldn't load, no loadSaved file specified")
 
+    #def plotAllInOne( self, dataFrame, dataTypeList=['dT_ns','dTCorr','dTPPCorr'] ):
+    def __plotAllInOne( self, dfView, loc, figure=None ) :
+        logMsg('DEBUG: plotAllInOne...')
+        if loc == None:
+            raise Exception("ERROR: cannot plotAllInOne() with out loc= value")
+        if figure == None:
+            figure = plt.figure()
+        fig = figure
+        axes = fig.gca()
+        axes.format_xdata = self.dateFormatter
+        for name in dfView.keys() :
+            seq = dfView[name]
+            if name in self.optionsDict['resampleDataBeforePlotList'] :
+                seq = seq.resample(self.options.resamplePlot)
+            color = self.optionsDict['tofPlotPref']['color'+':'+loc][name]
+            marker = self.optionsDict['tofPlotPref']['marker'+':'+loc][name]
+            label = '_nolegend_'
+            if loc == 'nu1':
+                label = name
+            seq.plot(color=color,marker=marker,label=label,fillstyle='none')
+        #title = self.optionsDict['description']
+        #fig.suptitle(title)
+        #axes.set_ylabel('dT (ns)')
+        #axes.xaxis.set_minor_locator(AutoMinorLocator())
+        #fig.subplots_adjust(bottom=0.08)
+        #plt.legend(loc='best').get_frame().set_alpha(0.8)
+
+        logMsg('DEBUG: plotAllInOne: ...done')
+        return fig
+
+    def checkNames(self, dataFrame, nameList ):
+        '''chech each name against the keys in data frame.  Return a new list
+        of names that are valid.  Generate warning if any names had to be dropped.
+        '''
+        logMsg('DEBUG: checkNames ...')
+        newList = []
+        keys = dataFrame.keys()
+        for name in nameList:
+            if name in keys:
+                newList.append(name)
+            else:
+                logMsg("WARNING: checkNames: dataFrame doesn't contain key/name:",name,", dropped" )
+                #TODO raise Exception("WARNING:")
+        logMsg('DEBUG: checkNames ...done')
+        return newList
+
+    def __plotListForEachLoc(self, dataFrameDict, nameList=[], figure=None ):
+        if nameList == []:
+            raise Exception("ERROR: plotListForEachLoc need list of data types/names/columns to plot")
+        logMsg('DEBUG: plotListForEachLoc ...')
+        if figure == None:
+            figure = plt.figure()
+        for loc in self.locations() :
+            df = dataFrameDict[loc]
+            nameList = self.checkNames(df,nameList)
+            subDF = df[nameList]
+            self.__plotAllInOne( subDF, loc=loc, figure=figure )
+        logMsg('DEBUG: plotListForEachLoc ...done')
+        return figure
+
+    def plotType2new(self,dataFrameDict ):
+        logMsg('DEBUG: plotType2new...')
+        fig = plt.figure()
+        axes = fig.gca()
+        axes.format_xdata = self.dateFormatter
+        dataNameList = ['dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr','PPCorr','dTCorr_avg','dTPPCorr_avg']
+        self.__plotListForEachLoc( dataFrameDict, nameList=dataNameList , figure=fig )
+
+        title = self.optionsDict['description']
+        plt.suptitle(title)
+        plt.ylabel('dT (ns)')
+        axes.xaxis.set_minor_locator(AutoMinorLocator())
+        fig.subplots_adjust(bottom=0.08)
+        plt.legend(loc='best').get_frame().set_alpha(0.8)
+
+        #plt.draw() # redraw
+        plt.show()
+        logMsg('DEBUG: plotType2new...')
 
     def plotType1(self, dataFrame):
         logMsg('DEBUG: plotType1...')
@@ -510,7 +603,7 @@ class tofAnalayser:
         fig = plt.figure()
         axes = fig.gca()
         axes.format_xdata = self.dateFormatter
-        for name in ('dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr'):
+        for name in ('dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr','PPCorr'):
             for loc in dataFrameDict.keys():
                 db = dataFrameDict[loc]
                 seq = db[name]
@@ -535,13 +628,48 @@ class tofAnalayser:
     def viewBasic(self):
         '''gather data from different locations into one plot'''
         logMsg('DEBUG: viewBasic...')
-        self.plotType2(self.dbDict)
+        #self.plotType2(self.dbDict)
+        self.plotType2new(self.dbDict)
         logMsg('DEBUG: viewBasic...done')
+
+    def __dropNAN(self):
+        '''drop unusable values'''
+        logMsg("DEBUG: droping NAN values...")
+        for loc in self.dbDict.keys():
+            dat = self.dbDict[loc]
+            self.dbDict[loc] = dat.dropna(how='any')
+            logMsg("DEBUG: after dropna:",dat)
+        logMsg("DEBUG: droping NAN values...done")
 
     def analyse(self):
         logMsg('DEBUG: Analyse...')
         self.viewBasic()
         logMsg('DEBUG: Analyse...done')
+
+    def doAvg(self):
+        if not self.optionsDict['reProcess'] :
+            logMsg("DEBUG: doPPPCorr: reprocessing disabled, skipping")
+            return None
+
+        window = self.options.avgWindow
+        for loc in self.locations():
+            db = self.dbDict[loc]
+            db['dTCorr_avg'] = pandas.rolling_mean( db.dTCorr, window )
+            db['dTPPCorr_avg'] = pandas.rolling_mean( db.dTPPCorr, window )
+            self.__previewDF(db[['dT_ns','dTCorr','dTCorr_avg','dTPPCorr','dTPPCorr_avg']], title='doAvg'+loc )
+
+    def doCalculations(self):
+        if not self.optionsDict['reProcess'] :
+            logMsg("DEBUG: doPPPCorr: reprocessing disabled, skipping")
+            return None
+        self.doXPPScorr()
+        #self.preview()
+        self.doPPPcorr()
+        #self.preview()
+        self.doAvg()
+        #self.preview()
+        self.__dropNAN()
+
 
 ## MAIN ##
 def runMain():
@@ -554,20 +682,15 @@ def runMain():
     #tof.preview()
 # organize data
     tof.prep()
-    #tof.preview()
 # import correcitions
 # apply corrections
-    tof.doXPPScorr()
-    #tof.preview()
-    tof.doPPPcorr()
-    #tof.preview()
-# store analysed data
+    tof.doCalculations()
+# store data
     tof.save()
 # analyse data
-    #tof.preview()
     tof.analyse()
 # store analysed data
-    tof.save()
+    #tof.save()
 # overview plot
 # find sub-series
 # reanalyse
