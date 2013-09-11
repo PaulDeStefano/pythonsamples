@@ -37,9 +37,9 @@ mpl.rcParams['figure.subplot.left'] = 0.07
 mpl.rcParams['figure.subplot.bottom'] = 0.08
 mpl.rcParams['figure.subplot.right'] = 0.96
 mpl.rcParams['figure.subplot.top'] = 0.96 
-mpl.rcParams['grid.alpha'] = 0.6
+mpl.rcParams['grid.alpha'] = 0.5
 mpl.rcParams['axes.grid'] = True
-mpl.rcParams['axes.facecolor'] = '0.80'
+mpl.rcParams['axes.facecolor'] = '0.90'
 mpl.rc('lines'
         ,linestyle=None
         ,marker='+'
@@ -177,8 +177,8 @@ class tofAnalayser:
         parser.add_argument('--hdf5', action='store_true', default=True, help='Use HDF5 file format to store data')
         parser.add_argument('--csv', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
         parser.add_argument('--debug', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
-        parser.add_argument('--avgWindow', default=1000, help='Calculate rolling average (of selected data) with specified window value' )
-        parser.add_argument('--resamplePlot', default='100S', help='Select sub-sample size for plotting selected data types' )
+        parser.add_argument('--avgWindow', nargs='?', default=1000, help='Calculate rolling average (of selected data) with specified window value' )
+        parser.add_argument('--resamplePlot', nargs='?', default=None, help='Select sub-sample size for plotting selected data types' )
 
         self.options = parser.parse_args()
         args = self.options
@@ -201,7 +201,10 @@ class tofAnalayser:
         optionsDict['forceReProcess'] = args.forceReProcess
         optionsDict['debug'] = args.debug
         optionsDict['avgWindow'] = int(args.avgWindow)
-        optionsDict['resamplePlot'] = args.resamplePlot
+        if args.resamplePlot == None:
+            optionsDict['resamplePlot'] = str(optionsDict['avgWindow'] / 2)+'S'
+        else:
+            optionsDict['resamplePlot'] = args.resamplePlot
 
         ''' we may not always want to do the same calcuations.  If data has been
         loaded from stored data file, then some processing can be skipped.'''
@@ -383,7 +386,7 @@ class tofAnalayser:
         #previewDF.plot(grid=True,title='Preview:'+title)
         #for key in previewDF.keys():
         #    previewDF[key].plot(style=self.styleMap[key])
-        previewDF.resample('10S').plot(subplots=True,grid=True)
+        previewDF.resample('100S').plot(subplots=True,grid=True)
         plt.suptitle('Preview:'+title+'(downsampled)')
         plt.show()
         logMsg("DEBUG: previewDF ...done")
@@ -524,13 +527,13 @@ class tofAnalayser:
         for name in dfView.keys() :
             seq = dfView[name]
             if name in self.optionsDict['resampleDataBeforePlotList'] :
-                seq = seq.resample(self.options.resamplePlot)
+                seq = seq.resample(self.optionsDict['resamplePlot'] )
             color = self.optionsDict['tofPlotPref']['color'+':'+loc][name]
             marker = self.optionsDict['tofPlotPref']['marker'+':'+loc][name]
             label = '_nolegend_'
             if loc == 'nu1':
                 label = name
-            seq.plot(color=color,marker=marker,label=label,fillstyle='none')
+            seq.plot(color=color,marker=marker,label=label,fillstyle='full')
         #title = self.optionsDict['description']
         #fig.suptitle(title)
         #axes.set_ylabel('dT (ns)')
@@ -651,7 +654,7 @@ class tofAnalayser:
             logMsg("DEBUG: doPPPCorr: reprocessing disabled, skipping")
             return None
 
-        window = self.options.avgWindow
+        window = self.optionsDict['avgWindow']
         for loc in self.locations():
             db = self.dbDict[loc]
             db['dTCorr_avg'] = pandas.rolling_mean( db.dTCorr, window )
