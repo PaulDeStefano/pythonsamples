@@ -82,6 +82,10 @@ class tofAnalayser:
     release = releaseName = '2013.09.01'
     formatDict = { 'ticFinal'   : 'iso8601 dT ignore ignore' 
             , 'ticFinal.full'   : 'iso8601 dT unixtime nsec' 
+#            , 'ticOrig'         : 'utcDate,utcTime,dT,ignore' 
+#            , 'ticOrig.full'    : 'utcDate,utcTime,dT,unixtime' 
+            , 'ticOrigMod'      : 'iso8601,dT,ignore' 
+            , 'ticOrigMod.full' : 'iso8601,dT,unixtime' 
             , 'getCorrData'     : 'iso8601,ignore,xPPSOffset,rxClkBias,rx_clk_ns' 
             , 'getCorrData.full': 'iso8601,unixtime,xPPSOffset,rxClkBias,rx_clk_ns' 
             , 'xPPSOffset'      : 'iso8601,xPPSOffset,ignore,ignore,ignore,ignore,ignore,ignore' 
@@ -365,7 +369,8 @@ class tofAnalayser:
                 ,delim_whitespace = delim_whitespace
                 ,usecols = usecols
                 ,nrows = self.optionsDict['importLimit']
-                ,comment = '#'
+                ,header=0
+#                ,comment = '#' # not supported??
                 )
 
         logMsg('DEBUG: _loadFile: loading file...done.')
@@ -386,7 +391,12 @@ class tofAnalayser:
         #previewDF.plot(grid=True,title='Preview:'+title)
         #for key in previewDF.keys():
         #    previewDF[key].plot(style=self.styleMap[key])
-        previewDF.resample('100S').plot(subplots=True,grid=True)
+        keys = previewDF.keys()
+        if len(keys) > 1 :
+            useSub=True
+        else:
+            useSub=False
+        previewDF.resample('100S').plot(subplots=useSub,grid=True)
         plt.suptitle('Preview:'+title+'(downsampled)')
         plt.show()
         logMsg("DEBUG: previewDF ...done")
@@ -414,18 +424,28 @@ class tofAnalayser:
             logMsg("DEBUG: prep: reprocessing disabled, skipping")
             return None
 
+        #self.__dropNAN()
+
         for loc in self.dbDict.keys():
             dat = self.dbDict[loc]
             if dat.empty:
                 logMsg("DEBUG: empty data for location:",loc,"skipping")
                 continue
+
             dat = self.dbDict[loc]
+
+            '''sort'''
+            #dat = dat.sort_index()
+
             '''convert dT to ns'''
+            logMsg("DEBUG: trying to convert dT (s) to dT (ns), loc:",loc)
             if 'dT' in dat.keys():
+
                 '''drop meas > 1s'''
                 df = dat['dT']
                 df = df[df < 1.01]
                 dat['dT'] = df
+
                 '''convert to ns'''
                 df = df * 1E9
                 dat['dT_ns'] = df
@@ -433,6 +453,8 @@ class tofAnalayser:
             '''convert rxClkBias to ns'''
             if 'rxClkBias' in dat.keys():
                 dat['rxClkBias_ns'] = dat['rxClkBias'] * 1E6
+
+            assert( dat is self.dbDict[loc] )
 
     def doXPPScorr(self):
         logMsg("DEBUG: reProcess: ",self.optionsDict['reProcess'])
@@ -448,7 +470,9 @@ class tofAnalayser:
                 logMsg("DEBUG: empty data for location:",loc,"skipping")
                 continue
             if ('dT_ns' not in dat.keys()) or ('xPPSOffset' not in dat.keys()):
-                raise Exception("Data needed for xPPSOffset corrections not found")
+                #raise Exception("Data needed for xPPSOffset corrections not found")
+                logMsg("WARNING: insufficient data for xPPSoffset correction, loc:",loc,", skipping")
+                continue
             coeff = -1
             if not self.options.negOffset:
                 coeff = 1
@@ -472,8 +496,11 @@ class tofAnalayser:
             if dat.empty:
                 logMsg("DEBUG: empty data for location:",loc,"skipping")
                 continue
-            if ('rxClkBias_ns' not in dat.keys()) or ('rx_clk_ns' not in dat.keys()):
-                raise Exception("Data needed for PP corrections not found")
+            keys = dat.keys()
+            if ('rxClkBias_ns' not in keys) or ('rx_clk_ns' not in keys) or ('dTCorr' not in keys) :
+                #raise Exception("Data needed for PP corrections not found")
+                logMsg("DEBUG: insufficient data for PPP correction, loc:",loc,", skipping")
+                continue
             logMsg("DEBUG: loc:",loc,":",dat)
             dat['PPCorr'] = dat.rxClkBias_ns - dat.rx_clk_ns
             dat['dTPPCorr'] = dat.dTCorr - dat.rxClkBias_ns + dat.rx_clk_ns
@@ -515,15 +542,12 @@ class tofAnalayser:
             logMsg("DEBUG: couldn't load, no loadSaved file specified")
 
     #def plotAllInOne( self, dataFrame, dataTypeList=['dT_ns','dTCorr','dTPPCorr'] ):
-    def __plotAllInOne( self, dfView, loc, figure=None ) :
+    def __plotAllInOne( self, dfView, loc, figure ) :
         logMsg('DEBUG: plotAllInOne...')
         if loc == None:
             raise Exception("ERROR: cannot plotAllInOne() with out loc= value")
-        if figure == None:
-            figure = plt.figure()
         fig = figure
         axes = fig.gca()
-        axes.format_xdata = self.dateFormatter
         for name in dfView.keys() :
             seq = dfView[name]
             if name in self.optionsDict['resampleDataBeforePlotList'] :
@@ -533,7 +557,7 @@ class tofAnalayser:
             label = '_nolegend_'
             if loc == 'nu1':
                 label = name
-            seq.plot(color=color,marker=marker,label=label,fillstyle='full')
+            seq.plot(ax=axes,color=color,marker=marker,label=label,fillstyle='full')
         #title = self.optionsDict['description']
         #fig.suptitle(title)
         #axes.set_ylabel('dT (ns)')
@@ -560,16 +584,18 @@ class tofAnalayser:
         logMsg('DEBUG: checkNames ...done')
         return newList
 
-    def __plotListForEachLoc(self, dataFrameDict, nameList=[], figure=None ):
+    def __plotListForEachLoc(self, dataFrameDict, nameList, figure ):
         if nameList == []:
             raise Exception("ERROR: plotListForEachLoc need list of data types/names/columns to plot")
         logMsg('DEBUG: plotListForEachLoc ...')
-        if figure == None:
-            figure = plt.figure()
         for loc in self.locations() :
+            logMsg('DEBUG: plotListForEachLoc: working on loc:',loc)
             df = dataFrameDict[loc]
-            nameList = self.checkNames(df,nameList)
-            subDF = df[nameList]
+            newNameList = self.checkNames(df,nameList)
+            if newNameList == list() :
+                logMsg('DEBUG: plotListForEachLoc: none of the requested data types could be found for plotting, loc:',loc,', skipping' )
+                continue
+            subDF = df[newNameList]
             self.__plotAllInOne( subDF, loc=loc, figure=figure )
         logMsg('DEBUG: plotListForEachLoc ...done')
         return figure
@@ -585,9 +611,11 @@ class tofAnalayser:
         title = self.optionsDict['description']
         plt.suptitle(title)
         plt.ylabel('dT (ns)')
+        legend = plt.legend(loc='best')
+        if hasattr(legend,'get_frame') :
+            legend.get_frame().set_alpha(0.8)
         axes.xaxis.set_minor_locator(AutoMinorLocator())
         fig.subplots_adjust(bottom=0.08)
-        plt.legend(loc='best').get_frame().set_alpha(0.8)
 
         #plt.draw() # redraw
         plt.show()
@@ -598,33 +626,6 @@ class tofAnalayser:
         plt.figure()
         for key in dataFrame.keys():
             dataFrame[key].plot(grid=True,style=tofAnalayser.styleMap[key])
-        plt.show()
-        logMsg('DEBUG: plotType2: done...')
-
-    def plotType2(self, dataFrameDict):
-        logMsg('DEBUG: plotType2...')
-        fig = plt.figure()
-        axes = fig.gca()
-        axes.format_xdata = self.dateFormatter
-        for name in ('dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr','PPCorr'):
-            for loc in dataFrameDict.keys():
-                db = dataFrameDict[loc]
-                seq = db[name]
-                color = self.optionsDict['tofPlotPref']['color'+':'+loc][name]
-                marker = self.optionsDict['tofPlotPref']['marker'+':'+loc][name]
-                label = '_nolegend_'
-                if loc == 'nu1':
-                    label = name
-                seq.plot(color=color,marker=marker,label=label)
-        title = self.optionsDict['description']
-        plt.suptitle(title)
-        plt.ylabel('dT (ns)')
-        axes.xaxis.set_minor_locator(AutoMinorLocator())
-        fig.subplots_adjust(bottom=0.08)
-        plt.legend(loc='best').get_frame().set_alpha(0.8)
-        #ax = axes.get_xaxis()
-        #ay = axes.get_yaxis()
-
         plt.show()
         logMsg('DEBUG: plotType2: done...')
 
@@ -657,9 +658,17 @@ class tofAnalayser:
         window = self.optionsDict['avgWindow']
         for loc in self.locations():
             db = self.dbDict[loc]
-            db['dTCorr_avg'] = pandas.rolling_mean( db.dTCorr, window )
-            db['dTPPCorr_avg'] = pandas.rolling_mean( db.dTPPCorr, window )
-            self.__previewDF(db[['dT_ns','dTCorr','dTCorr_avg','dTPPCorr','dTPPCorr_avg']], title='doAvg'+loc )
+            avgDataList = ['dTCorr','dTPPCorr']
+            for name in avgDataList:
+                if db.empty:
+                    logMsg("DEBUG: empty data for location:",loc,"skipping")
+                    continue
+                if name not in db.keys() :
+                    #raise Exception("Data needed for PP corrections not found")
+                    logMsg("DEBUG: insufficient data for Averaging, loc:",loc,", skipping")
+                    continue
+                avgname=name+'_avg'
+                db[avgname] = pandas.rolling_mean( db[name], window )
 
     def doCalculations(self):
         if not self.optionsDict['reProcess'] :
@@ -670,8 +679,7 @@ class tofAnalayser:
         self.doPPPcorr()
         #self.preview()
         self.doAvg()
-        #self.preview()
-        self.__dropNAN()
+        self.preview()
 
 
 ## MAIN ##
@@ -682,7 +690,9 @@ def runMain():
 # import main data
     tof.loadData()
 # preview
-    #tof.preview()
+    tof.preview()
+# store data
+    tof.save()
 # organize data
     tof.prep()
 # import correcitions
