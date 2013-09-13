@@ -159,7 +159,7 @@ class tofAnalayser:
             self.configure(argv)
 
     def configure(self, argv=None ):
-        logMsg("DEBUG: arvg:",argv)
+        logMsg("DEBUG: argv:",argv)
         self.parser = argparse.ArgumentParser(description='New TIC data plotter and analyser.')
         parser = self.parser
 
@@ -255,7 +255,9 @@ class tofAnalayser:
 
     def strToDict(self,s,default=0,delim1=',',delim2=':',cast=lambda x: int(x) ):
         logMsg("DEBUG: strToDict ...")
+        #logMsg("DEBUG: strToDict: got s:",s)
         if type(s) == type(int()) :
+            logMsg("DEBUG: strToDict: value is number, not string, can't unpack, appling as default")
             default = s
             s = 'all='+str(default)
         groups = s.split(delim1)
@@ -263,10 +265,9 @@ class tofAnalayser:
         for loc in self.locations():
             v = default
             for name,val in [x.split(delim2) for x in groups ]:
-                if loc == name or loc == 'all':
+                #logMsg( 'DEBUG: loc:',loc,' name:',name,' val:',val )
+                if (loc == name) or (loc == 'all') :
                     v = cast(val)
-                elif name not in self.locations() and name != 'all' :
-                    raise Exception( "ERROR: cannot unpack string:",s,", location:",loc," doesn't match locations in ",self.locations() )
             d[loc] = v
         logMsg("DEBUG: strToDict ...done")
         return d
