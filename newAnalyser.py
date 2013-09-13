@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 import copy
 import matplotlib.dates as mdates
 from matplotlib.ticker import AutoMinorLocator
+import numpy as np
 
 # use tex to format text in matplotlib
 #rc('text', usetex=True)
@@ -82,8 +83,8 @@ class tofAnalayser:
     release = releaseName = '2013.09.01'
     formatDict = { 'ticFinal'   : 'iso8601 dT ignore ignore' 
             , 'ticFinal.full'   : 'iso8601 dT unixtime nsec' 
-#            , 'ticOrig'         : 'utcDate,utcTime,dT,ignore' 
-#            , 'ticOrig.full'    : 'utcDate,utcTime,dT,unixtime' 
+            , 'ticOrig'         : 'utcDate,utcTime,dT,ignore' 
+            , 'ticOrig.full'    : 'utcDate,utcTime,dT,unixtime' 
             , 'ticOrigMod'      : 'iso8601,dT,ignore' 
             , 'ticOrigMod.full' : 'iso8601,dT,unixtime' 
             , 'getCorrData'     : 'iso8601,ignore,xPPSOffset,rxClkBias,rx_clk_ns' 
@@ -148,7 +149,7 @@ class tofAnalayser:
                 ,'dT-StnClkOff' : 'o+'
                 }
 
-    dateFormatter = mdates.DateFormatter('%Y%m%dT%H:%M')
+    dateFormatter = mdates.DateFormatter('%Y%m%d %H:%M:%S')
 
     def locations(self):
         return self.dbDict.keys()
@@ -183,6 +184,7 @@ class tofAnalayser:
         parser.add_argument('--debug', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
         parser.add_argument('--avgWindow', nargs='?', default=1000, help='Calculate rolling average (of selected data) with specified window value' )
         parser.add_argument('--resamplePlot', nargs='?', default=None, help='Select sub-sample size for plotting selected data types' )
+        parser.add_argument('--previewPercent', nargs='?', default=20, help='Select sub-sample size for plotting selected data types' )
 
         self.options = parser.parse_args()
         args = self.options
@@ -206,9 +208,10 @@ class tofAnalayser:
         optionsDict['debug'] = args.debug
         optionsDict['avgWindow'] = int(args.avgWindow)
         if args.resamplePlot == None:
-            optionsDict['resamplePlot'] = str(optionsDict['avgWindow'] / 2)+'S'
+            optionsDict['resamplePlot'] = str(int(np.floor(optionsDict['avgWindow'] / 5)))+'S'
         else:
-            optionsDict['resamplePlot'] = args.resamplePlot
+            optionsDict['resamplePlot'] = str(int(args.resamplePlot))+'S'
+        optionsDict['previewPercent'] = int(args.previewPercent)
 
         ''' we may not always want to do the same calcuations.  If data has been
         loaded from stored data file, then some processing can be skipped.'''
@@ -324,28 +327,21 @@ class tofAnalayser:
         else:
             logMsg("WARNING: no files to load")
 
-        """
-        if 'offsetFile' in self.optionsDict :
-            for s in self.optionsDict['offsetFile'] :
-                loc, fileName, fmt = s.split(':')
-                newData = self._loadFile(fileName,fmt='xPPSOffset.dat')
-        if 'corr' in self.optionsDict :
-            for s in self.optionsDict['corr'] :
-                loc, fileName, fmt = s.split(':')
-                newData = self._loadFile(fileName,fmt='getCorrData')
-        """
-        logMsg("DEBUG: reProcess: ",self.optionsDict['reProcess'])
+        self.preview()
 
     def _getFormat(self,fmt):
-        if fmt in self.formatDict:
+        if fmt in self.formatDict.keys() :
             return self.formatDict[fmt]
-        else:
+        elif re.search(fmt,self.formatDict['master']) :
+            '''okay, at least this one could be meaningful'''
             return fmt
+        else :
+            raise Exception("DEBUG: couldn't interpret format specification: "+fmt)
 
     def _loadFile(self, filename, loc, fmt='default' ):
         logMsg('NOTICE: _loadFile: loading file:',filename,'...' )
         fmt=self._getFormat(fmt)
-        #logMsg('DEBUG: _loadFile: using format:', fmt )
+        logMsg('DEBUG: _loadFile: using format:', fmt )
 
         delim_whitespace = False
         names = None
@@ -360,8 +356,8 @@ class tofAnalayser:
 
         '''filter ignore columns'''
         usecols = [ name for name in names if name != 'ignore' ]
-        #logMsg('DEBUG: _loadFile: names:',names)
-        #logMsg('DEBUG: _loadFile: usecols:',usecols)
+        logMsg('DEBUG: _loadFile: names:',names)
+        logMsg('DEBUG: _loadFile: usecols:',usecols)
 
         newData = pandas.read_csv(filename
                 ,index_col=0, parse_dates=True
@@ -370,7 +366,8 @@ class tofAnalayser:
                 ,usecols = usecols
                 ,nrows = self.optionsDict['importLimit']
                 ,header=0
-#                ,comment = '#' # not supported??
+                ,skiprows=1
+#                ,comment = '#' # not supported in v0.10!!
                 )
 
         logMsg('DEBUG: _loadFile: loading file...done.')
@@ -396,7 +393,9 @@ class tofAnalayser:
             useSub=True
         else:
             useSub=False
-        previewDF.resample('100S').plot(subplots=useSub,grid=True)
+        ppct = self.optionsDict['previewPercent']
+        resampleStr = str(int(np.floor( 100/ppct ) ))+'S'
+        previewDF.resample(resampleStr).plot(subplots=useSub,grid=True)
         plt.suptitle('Preview:'+title+'(downsampled)')
         plt.show()
         logMsg("DEBUG: previewDF ...done")
@@ -424,7 +423,10 @@ class tofAnalayser:
             logMsg("DEBUG: prep: reprocessing disabled, skipping")
             return None
 
-        #self.__dropNAN()
+        '''drop NAN since we are sure we are going to re calculate
+        If not done here, should include condition on reprocessing.
+        shold be first thing after loadFile'''
+        self.__dropNAN()
 
         for loc in self.dbDict.keys():
             dat = self.dbDict[loc]
@@ -549,9 +551,10 @@ class tofAnalayser:
         fig = figure
         axes = fig.gca()
         for name in dfView.keys() :
-            seq = dfView[name]
             if name in self.optionsDict['resampleDataBeforePlotList'] :
-                seq = seq.resample(self.optionsDict['resamplePlot'] )
+                seq = dfView[name].resample(self.optionsDict['resamplePlot'] )
+            else:
+                seq = dfView[name]
             color = self.optionsDict['tofPlotPref']['color'+':'+loc][name]
             marker = self.optionsDict['tofPlotPref']['marker'+':'+loc][name]
             label = '_nolegend_'
@@ -689,8 +692,6 @@ def runMain():
     #tof.configure(sys.argv[1:])
 # import main data
     tof.loadData()
-# preview
-    tof.preview()
 # store data
     tof.save()
 # organize data
