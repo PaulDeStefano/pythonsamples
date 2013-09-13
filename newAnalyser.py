@@ -182,9 +182,9 @@ class tofAnalayser:
         parser.add_argument('--hdf5', action='store_true', default=True, help='Use HDF5 file format to store data')
         parser.add_argument('--csv', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
         parser.add_argument('--debug', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
-        parser.add_argument('--avgWindow', nargs='?', default=1000, help='Calculate rolling average (of selected data) with specified window value' )
-        parser.add_argument('--resamplePlot', nargs='?', default=None, help='Select sub-sample size for plotting selected data types' )
-        parser.add_argument('--previewPercent', nargs='?', default=20, help='Select sub-sample size for plotting selected data types' )
+        parser.add_argument('--avgWindow', nargs='?', default=1000, help='Calculate rolling average (of selected data) with specified window size (in units of samples, i.e. secs)' )
+        parser.add_argument('--resamplePlot', nargs='?', default=1000/4, help='Select sub-sample size for plotting selected data types (averaging types). Default=1/4 of avgWindow => 4 plot points in each window' )
+        parser.add_argument('--previewPercent', nargs='?', default=20, help='Sub-sample size for all *preview* plotting' )
 
         self.options = parser.parse_args()
         args = self.options
@@ -676,7 +676,7 @@ class tofAnalayser:
 
     def doCalculations(self):
         if not self.optionsDict['reProcess'] :
-            logMsg("DEBUG: doPPPCorr: reprocessing disabled, skipping")
+            logMsg("DEBUG: doCalculations: reprocessing disabled, skipping")
             return None
         self.doXPPScorr()
         #self.preview()
