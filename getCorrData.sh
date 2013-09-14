@@ -75,19 +75,29 @@ function isBestFile() {
   local prefix=${file%%${suffix}}
 
   # have we done this day before?
-  if expr "${daysDone}" : ".*${thisday}" >/dev/null 2>&1 ; then {
-    # already done it
-    logMsg "DEBUG: already did day:${thisday}, should skip"
-    return 1
-  } fi
+  for day in ${daysDone}; do {
+    if [[ ${day} == ${thisday} ]]; then {
+      # already done it
+      logMsg "DEBUG: already did day:${thisday}, should skip"
+      return 1
+    } fi
+  } done
 
   # is it from an external GPS log file?
   if [[ ${base} =~ .+\.ext\..+ ]] ; then {
     # yes, external file, not preffered.
     # is there an internal file for the same day?
     local filesForThisDay=$( echo "${fileList}" | egrep "\.int\..*day${thisday}" 2>/dev/null | sort )
-    if [ ! -z "${filesForThisDay}" ]; then {
-      # yes, there is at least one internal file for that day
+  } fi
+  # is it from an internal GPS log file?
+  if [[ ${base} =~ .+\.int\..+ ]] ; then {
+    # yes, internal file, preffered.
+    # is there an external file for the same day?
+    local filesForThisDay=$( echo "${fileList}" | egrep "\.ext\..*day${thisday}" 2>/dev/null | sort )
+  } fi
+
+  if [ ! -z "${filesForThisDay}" ]; then {
+      # yes, there is at least one other file for that day
       # what is the best internal file?
       local bestInt=$(echo "${filesForThisDay}" | tail --lines=1 )
       # is that newer than this one?
@@ -102,9 +112,9 @@ function isBestFile() {
         return 0
       } fi
 
-    } fi
-    # no, no internal files, which are preferred, cannot exclude
   } fi
+    # no, no internal files, which are preferred, cannot exclude
+
   # okay, it must be from an internal GPS log, which is preffered
   # or there isn't another internal file that is prefferred, continue
   # other external-log-based files should get caught below
