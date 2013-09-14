@@ -150,6 +150,8 @@ class tofAnalayser:
                 }
 
     dateFormatter = mdates.DateFormatter('%Y%m%d %H:%M:%S')
+    xDataDateFormatter = mdates.DateFormatter('%a %d %b #%j %H:%M:%S')
+    majorTickFormater = mdates.DateFormatter('%d %b #%j\n%H:%M')
 
     def locations(self):
         return self.dbDict.keys()
@@ -182,9 +184,10 @@ class tofAnalayser:
         parser.add_argument('--hdf5', action='store_true', default=True, help='Use HDF5 file format to store data')
         parser.add_argument('--csv', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
         parser.add_argument('--debug', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
-        parser.add_argument('--avgWindow', nargs='?', default=1000, help='Calculate rolling average (of selected data) with specified window size (in units of samples, i.e. secs)' )
-        parser.add_argument('--resamplePlot', nargs='?', default=1000/4, help='Select sub-sample size for plotting selected data types (averaging types). Default=1/4 of avgWindow => 4 plot points in each window' )
+        parser.add_argument('--avgWindow', nargs='?', default=10000, help='Calculate rolling average (of selected data) with specified window size (in units of samples, i.e. secs)' )
+        parser.add_argument('--resamplePlot', nargs='?', default=10000/4, help='Select sub-sample size for plotting selected data types (averaging types). Default=1/4 of avgWindow => 4 plot points in each window' )
         parser.add_argument('--previewPercent', nargs='?', default=20, help='Sub-sample size for all *preview* plotting' )
+        parser.add_argument('--storeOnly', action='store_true', default=False, help='after loading data, save it (if outputFile given), and quit.  Useful for consolidating data into HDF file, faster reading later')
 
         self.options = parser.parse_args()
         args = self.options
@@ -212,6 +215,7 @@ class tofAnalayser:
         else:
             optionsDict['resamplePlot'] = str(int(args.resamplePlot))+'S'
         optionsDict['previewPercent'] = int(args.previewPercent)
+        optionsDict['storeOnly'] = args.storeOnly
 
         ''' we may not always want to do the same calcuations.  If data has been
         loaded from stored data file, then some processing can be skipped.'''
@@ -327,8 +331,6 @@ class tofAnalayser:
 
         else:
             logMsg("WARNING: no files to load")
-
-        self.preview()
 
     def _getFormat(self,fmt):
         if fmt in self.formatDict.keys() :
@@ -513,11 +515,12 @@ class tofAnalayser:
 
         logMsg('DEBUG: PPCorr...done')
 
-    def save(self):
+    def save(self, suffix='', type='hdf'):
         logMsg('DEBUG: saving database to file...')
         fileName = self.options.outputPrefix
+        ext='.hdf5'
         if fileName:
-            fileName += '.hdf5'
+            fileName += ext+suffix
             logMsg("DEBUG: saving to HDF5 store in file",fileName)
         #with pandas.HDFStore(fileName+'.hdf5') as store:
             store = pandas.HDFStore(fileName)
@@ -608,7 +611,7 @@ class tofAnalayser:
         logMsg('DEBUG: plotType2new...')
         fig = plt.figure()
         axes = fig.gca()
-        axes.format_xdata = self.dateFormatter
+        axes.format_xdata = self.xDataDateFormatter
         dataNameList = ['dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr','PPCorr','dTCorr_avg','dTPPCorr_avg']
         self.__plotListForEachLoc( dataFrameDict, nameList=dataNameList , figure=fig )
 
@@ -619,8 +622,15 @@ class tofAnalayser:
         if hasattr(legend,'get_frame') :
             legend.get_frame().set_alpha(0.8)
         axes.xaxis.set_minor_locator(AutoMinorLocator())
+        axes.xaxis.set_major_formatter(self.majorTickFormater)
         fig.subplots_adjust(bottom=0.08)
 
+        # auto zoom to important bits
+        if 'dT_ns' in self.dbDict['nu1'].keys():
+            dTmax=self.dbDict['nu1']['dT_ns'].max()
+            dTmin=self.dbDict['nu1']['dT_ns'].min()
+            axes.set_ylim(bottom=dTmin-5,top=dTmax+5)
+        
         #plt.draw() # redraw
         plt.show()
         logMsg('DEBUG: plotType2new...')
@@ -636,7 +646,6 @@ class tofAnalayser:
     def viewBasic(self):
         '''gather data from different locations into one plot'''
         logMsg('DEBUG: viewBasic...')
-        #self.plotType2(self.dbDict)
         self.plotType2new(self.dbDict)
         logMsg('DEBUG: viewBasic...done')
 
@@ -690,9 +699,10 @@ class tofAnalayser:
 def runMain():
     tof = tofAnalayser()
     tof.configure()
-    #tof.configure(sys.argv[1:])
 # import main data
     tof.loadData()
+    if tof.optionsDict['storeOnly'] :
+        exit(0)
 # store data
     tof.save()
 # organize data
@@ -701,7 +711,7 @@ def runMain():
 # apply corrections
     tof.doCalculations()
 # store data
-    tof.save()
+    tof.save(suffix='.postCalc')
 # analyse data
     tof.analyse()
 # store analysed data
