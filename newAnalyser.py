@@ -92,8 +92,11 @@ class tofAnalayser:
             , 'xPPSOffset'      : 'iso8601,xPPSOffset,ignore,ignore,ignore,ignore,ignore,ignore' 
             , 'xPPSOffset.full' : 'iso8601,xPPSOffset,unixtime,ignore,ignore,ignore,ignore,ignore' 
             , 'master'          : 'iso8601,dT,xPPSOffset,rxClkBias,rx_clk_ns,dT_ns,rxClkBias_ns,PPCorr,dTPPCorr,dTCorr_avg,dTPPCorr_avg' 
+            , 'csvSave'         : 'unixtime,dT,xPPSOffset,rxClkBias,rx_clk_ns,dT_ns,rxClkBias_ns,PPCorr,dTPPCorr,dTCorr_avg,dTPPCorr_avg' 
+            , 'csvOleg'         : 'unixtime dT_ns xPPSOffset rx_clk_ns rxClkBias_ns PPCorr dTPPCorr' 
             }
-    formatDict['default'] = formatDict['ticFinal']
+    formatDict['default'] = formatDict['ticFinal']  # alias names for formats
+    formatDict['hdf'] = formatDict['master']        # not used
     optionsDict = {}
     masterDF = pandas.DataFrame({
         'iso8601'       : []
@@ -181,13 +184,14 @@ class tofAnalayser:
         parser.add_argument('--showFormats', action='store_true', default=False, help='Show a list of known formats')
         parser.add_argument('--loadSaved', nargs='?', default=False, help='Load a previously saved data set from this file')
         parser.add_argument('--forceReProcess', action='store_true', default=False, help='Froce reprocessing of data loaded from saved data files')
-        parser.add_argument('--hdf5', action='store_true', default=True, help='Use HDF5 file format to store data')
-        parser.add_argument('--csv', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
-        parser.add_argument('--debug', action='store_true', default=False, help='Use CSV file format to store data TODO: NOT IMPLIMENTED YET')
-        parser.add_argument('--avgWindow', nargs='?', default=10000, help='Calculate rolling average (of selected data) with specified window size (in units of samples, i.e. secs)' )
-        parser.add_argument('--resamplePlot', nargs='?', default=10000/4, help='Select sub-sample size for plotting selected data types (averaging types). Default=1/4 of avgWindow => 4 plot points in each window' )
+        parser.add_argument('--hdf5', action='store_true', default=True, help='Use HDF5 file format to store data.  Default is TRUE')
+        parser.add_argument('--csv', action='store_true', default=False, help='Use CSV file format to store data.')
+        parser.add_argument('--debug', action='store_true', default=False, help='Force extra preview plots during calculations')
+        parser.add_argument('--avgWindow', nargs='?', default=100000, help='Calculate rolling average (of selected data) with specified window size (in units of samples, i.e. secs)' )
+        parser.add_argument('--resamplePlot', nargs='?', default=100000/10, help='Select sub-sample size for plotting selected data types (averaging types). Default=1/4 of avgWindow => 5 plot points in each window' )
         parser.add_argument('--previewPercent', nargs='?', default=20, help='Sub-sample size for all *preview* plotting' )
         parser.add_argument('--storeOnly', action='store_true', default=False, help='after loading data, save it (if outputFile given), and quit.  Useful for consolidating data into HDF file, faster reading later')
+        parser.add_argument('--colsToCSV', nargs='?', default='csvSave', help='Specify the format, explicitly, or the format name to use when writing to CSV files')
 
         self.options = parser.parse_args()
         args = self.options
@@ -209,6 +213,8 @@ class tofAnalayser:
         optionsDict['loadSaved'] = args.loadSaved
         optionsDict['forceReProcess'] = args.forceReProcess
         optionsDict['debug'] = args.debug
+        optionsDict['hdf5'] = args.hdf5
+        optionsDict['csv'] = args.csv
         optionsDict['avgWindow'] = int(args.avgWindow)
         if args.resamplePlot == None:
             optionsDict['resamplePlot'] = str(int(np.floor(optionsDict['avgWindow'] / 5)))+'S'
@@ -216,6 +222,7 @@ class tofAnalayser:
             optionsDict['resamplePlot'] = str(int(args.resamplePlot))+'S'
         optionsDict['previewPercent'] = int(args.previewPercent)
         optionsDict['storeOnly'] = args.storeOnly
+        optionsDict['colsToCSV'] = args.colsToCSV
 
         ''' we may not always want to do the same calcuations.  If data has been
         loaded from stored data file, then some processing can be skipped.'''
@@ -330,7 +337,7 @@ class tofAnalayser:
                 self.optionsDict['reProcess'] = True
 
         else:
-            logMsg("WARNING: no files to load")
+            logMsg("WARNING: no inputFiles to load")
 
     def _getFormat(self,fmt):
         if fmt in self.formatDict.keys() :
@@ -340,6 +347,23 @@ class tofAnalayser:
             return fmt
         else :
             raise Exception("DEBUG: couldn't interpret format specification: "+fmt)
+
+    def __decodeFormat(self, fmt):
+        delimiter = None
+        names = list()
+
+        fullFmt=self._getFormat(fmt)
+        
+        if re.search('\s', fullFmt):
+            '''whitespace delimited format'''
+            #logMsg('DEBUG: _loadFile: using whitespace as delimiter to read file')
+            delimiter=' '
+        else:
+            #logMsg('DEBUG: _loadFile: using comma as delimiter to read file')
+            delimiter=','
+        
+        names=fullFmt.split(delimiter)
+        return [ delimiter, names ]
 
     def _loadFile(self, filename, loc, fmt='default' ):
         logMsg('NOTICE: _loadFile: loading file:',filename,'...' )
@@ -459,6 +483,8 @@ class tofAnalayser:
             if 'rxClkBias' in dat.keys():
                 dat['rxClkBias_ns'] = dat['rxClkBias'] * 1E6
 
+            '''create unixtime field'''
+            unixtime = dat.index
             assert( dat is self.dbDict[loc] )
 
     def doXPPScorr(self):
@@ -515,21 +541,68 @@ class tofAnalayser:
 
         logMsg('DEBUG: PPCorr...done')
 
-    def save(self, suffix='', type='hdf'):
-        logMsg('DEBUG: saving database to file...')
-        fileName = self.options.outputPrefix
-        ext='.hdf5'
-        if fileName:
-            fileName += ext+suffix
+
+    def __addUNIXTimeColumn(self, dataFrame ):
+        if 'unixtime' in dataFrame.keys():
+            return dataFrame
+        index = dataFrame.index
+        timeList = [ x.strftime('%s') for x in index.tolist() ]
+        newColumn = pandas.DataFrame( timeList, index=index )
+        dataFrame['unixtime'] = newColumn
+        return dataFrame
+    
+    def __createUNIXtime(self):
+        for loc in self.locations():
+            logMsg("DEBUG: creating UNIX timestamp from DataFrame index for location:",loc)
+            db = self.dbDict[loc]
+            self.__addUNIXTimeColumn(db)
+
+    def saveToFile(self, fileNamePrefix, suffix='', typ='hdf' ):
+        logMsg('DEBUG: saveToFile: saving database to file...')
+        if  typ == 'hdf' :
+            fileName = fileNamePrefix+'.hdf5'+suffix
             logMsg("DEBUG: saving to HDF5 store in file",fileName)
-        #with pandas.HDFStore(fileName+'.hdf5') as store:
+            #with pandas.HDFStore(fileName+'.hdf5') as store:
             store = pandas.HDFStore(fileName)
             for loc in self.dbDict.keys():
                 store[loc] = self.dbDict[loc]
             store.close()
             del store
-        else:
-            logMsg("DEBUG: couldn't write, no outputFile specified")
+        elif typ == 'csv' :
+            fmt = self.optionsDict['colsToCSV']
+            separator, names = self.__decodeFormat(fmt)
+            logMsg("DEBUG: saveToFile: saving CSV, with separator:'"+separator+"' and columns:",names)
+            #self.__createUNIXtime()
+            for loc in self.locations():
+                db = self.dbDict[loc]
+                db = np.round(db,3)
+                self.__addUNIXTimeColumn(db)
+                fileName =  fileNamePrefix+'.'+loc+'.csv'+suffix
+                logMsg("DEBUG: saveToFile: saving to CSV store in file",fileName)
+                db.to_csv(fileName
+                        ,header=True
+                        ,cols=names
+                        ,sep=separator
+                        ,index=True
+                        ,index_label='utc'
+                        ,na_rep='NaN'
+                        )
+
+        else :
+            logMsg("DEBUG: saveToFile: couldn't save data, unrecognized output type:",typ)
+
+        logMsg('DEBUG: saveToFile: saving database to file...done')
+
+    def save(self, suffix='', typ='hdf'):
+        logMsg('DEBUG: save: saving database...')
+        fileName = self.options.outputPrefix
+        if not fileName:
+            logMsg("DEBUG: save: couldn't write, no outputFile specified")
+            return
+        if self.optionsDict['csv']:
+            typ='csv'
+        self.saveToFile(fileName, suffix=suffix,typ=typ )
+        logMsg('DEBUG: save: saving database...done')
 
     def __loadSaved(self):
         logMsg('DEBUG: loaded saved database from file...')
@@ -541,7 +614,9 @@ class tofAnalayser:
             for loc in self.dbDict.keys():
                 storeKey = '/'+loc
                 logMsg("DEBUG: loading key",storeKey,"from HDF5 store into location",loc)
-                self.dbDict[loc] = store[storeKey]
+                db = store[storeKey]
+                #db = np.round( db , 6 )
+                self.dbDict[loc] = db
 
             store.close()
         else:
@@ -701,10 +776,10 @@ def runMain():
     tof.configure()
 # import main data
     tof.loadData()
-    if tof.optionsDict['storeOnly'] :
-        exit(0)
 # store data
     tof.save()
+    if tof.optionsDict['storeOnly'] :
+        exit(0)
 # organize data
     tof.prep()
 # import correcitions
