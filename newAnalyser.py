@@ -30,23 +30,21 @@ import numpy as np
 
 # use tex to format text in matplotlib
 #rc('text', usetex=True)
-mpl.rcParams['figure.figsize'] = (14,9)
-mpl.rcParams['figure.facecolor'] = '0.75'
-mpl.rcParams['figure.dpi'] = 100
+mpl.rcParams['figure.figsize']      = (14,9)
+mpl.rcParams['figure.facecolor']    = '0.75'
+mpl.rcParams['figure.dpi']          = 100
 #mpl.rcParams['figure.subplot.left'] = 0.06
 mpl.rcParams['figure.subplot.left'] = 0.07
 mpl.rcParams['figure.subplot.bottom'] = 0.08
 mpl.rcParams['figure.subplot.right'] = 0.96
-mpl.rcParams['figure.subplot.top'] = 0.96 
-mpl.rcParams['grid.alpha'] = 0.5
-mpl.rcParams['axes.grid'] = True
-mpl.rcParams['axes.facecolor'] = '0.90'
-mpl.rc('lines'
-        ,linestyle=None
-        ,marker='+'
-        ,markersize=3
-        ,antialiased=True
-        )
+mpl.rcParams['figure.subplot.top']  = 0.96 
+mpl.rcParams['grid.alpha']          = 0.4
+mpl.rcParams['axes.grid']           = True
+mpl.rcParams['axes.facecolor']      = '0.90'
+mpl.rcParams['lines.linestyle']     = None
+mpl.rcParams['lines.marker']        = '+'
+mpl.rcParams['lines.markersize']    = 3
+mpl.rcParams['lines.antialiased']   = True
 mpl.rc('font'
         ,size=9 )
 mpl.rc('legend'
@@ -54,12 +52,14 @@ mpl.rc('legend'
         ,fontsize='small')
 mpl.rc('text'
         ,usetex=False )
-mpl.rc('xtick'
-        ,labelsize='medium'
-        ,direction='out' )
-mpl.rc('ytick'
-        ,labelsize='medium'
-        ,direction='out' )
+mpl.rcParams['xtick.major.size']    = 10.0
+mpl.rcParams['xtick.major.width']   = 2.0
+mpl.rcParams['xtick.labelsize']     = 'medium'
+mpl.rcParams['xtick.direction']     = 'inout'
+mpl.rcParams['ytick.major.size']    = 10.0
+mpl.rcParams['ytick.major.width']   = 2.0
+mpl.rcParams['ytick.labelsize']     = 'medium'
+mpl.rcParams['ytick.direction']     = 'inout'
 
 # disable sparse x ticks, doesn't work
 pandas.plot_params['x_compat'] = True
@@ -154,7 +154,34 @@ class tofAnalayser:
 
     dateFormatter = mdates.DateFormatter('%Y%m%d %H:%M:%S')
     xDataDateFormatter = mdates.DateFormatter('%a %d %b #%j %H:%M:%S')
-    majorTickFormater = mdates.DateFormatter('%d %b #%j\n%H:%M')
+    majorTickFormater = mdates.DateFormatter('%d %b #%j\n%H:%MZ')
+
+    def configPylab(self):
+        #mpl.rcParams['axes.format_xdata']       = self.xDataDateFormatter
+        #mpl.rcParams['axes.xaxis.set_major_locator']      = self.majorTickFormater
+        #mpl.rcParams['axes.xaxis.set_minor_locator']      = AutoMinorLocator()
+        pass
+
+    def configMPLaxis(self, ax):
+        ax.xaxis.set_minor_locator(AutoMinorLocator())          # enable minor ticks
+        ax.yaxis.set_minor_locator(AutoMinorLocator())
+        ax.xaxis.set_major_formatter(self.majorTickFormater)    # use explict data format on x axis
+        ax.format_xdata = self.xDataDateFormatter               # use slightly different fmt for pointer values
+
+    def configMPLaxes(self, axes):
+        if type(axes) == type(list()):
+            for ax in axes:
+                self.configMPLaxis(ax)
+        else:
+            '''assume axes'''
+            ax = axes
+            self.configMPLaxis(ax)
+            axes.format_xdata = self.xDataDateFormatter
+
+
+    def configMPLfig(self, fig):
+        self.configMPLaxes(axes=fig.gca())
+        fig.subplots_adjust(bottom=0.08)
 
     def locations(self):
         return self.dbDict.keys()
@@ -238,10 +265,10 @@ class tofAnalayser:
                 ,'marker:nd280'  : copy.copy(self.markerMap)
                 ,'marker:nu1'    : copy.copy(self.markerMap)
                 }
-        optionsDict['tofPlotPref']['color:sk']['dT_ns']     = 'red'
-        optionsDict['tofPlotPref']['color:nd280']['dT']     = 'red'
-        optionsDict['tofPlotPref']['marker:sk']['dT']        = 'x'
-        optionsDict['tofPlotPref']['marker:nd280']['dT_ns']  = 'x'
+        optionsDict['tofPlotPref']['color:sk']['dT_ns']         = 'red'
+        optionsDict['tofPlotPref']['color:nd280']['dT_ns']      = 'red'
+        optionsDict['tofPlotPref']['marker:sk']['dT_ns']        = 'x'
+        optionsDict['tofPlotPref']['marker:nd280']['dT_ns']     = 'x'
 
         '''allow different shift values per location'''
         self.parseDictOption( 'shiftMap',self.options.shiftOffset,delim2='=' )
@@ -254,6 +281,9 @@ class tofAnalayser:
         optionsDict['resampleDataBeforePlotList'] = filter( lambda x: re.search('_avg', x) , resampleList )
 
         logMsg('DEBUG: harvested coniguration:',optionsDict)
+
+        # set matplotlib configuration
+        self.configPylab()
 
         if args.showFormats:
             for fmt in self.formatDict:
@@ -293,6 +323,7 @@ class tofAnalayser:
                 ,how='outer'
                 ,left_index=True, right_index=True
                 ,copy=True
+                ,sort=False
                 )
         self.dbDict[loc] = db
         logMsg('DEBUG: addData...done')
@@ -423,13 +454,16 @@ class tofAnalayser:
         ppct = self.optionsDict['previewPercent']
         resampleStr = str(int(np.floor( 100/ppct ) ))+'S'
         previewDF.resample(resampleStr).plot(subplots=useSub,grid=True)
-        plt.suptitle('Preview:'+title+'(downsampled)')
+        fig = plt.gcf()
+        self.configMPLfig(fig)
+        plt.suptitle('Preview:'+title+' (downsampled)')
         plt.show()
         logMsg("DEBUG: previewDF ...done")
 
     def preview(self):
         logMsg('DEBUG: previewing...')
         logMsg('DEBUG: ', self.dbDict.keys() )
+        title = self.optionsDict['description']
         for loc in self.dbDict.keys():
             dat = self.dbDict[loc]
             if dat.empty:
@@ -437,7 +471,7 @@ class tofAnalayser:
                 continue
             logMsg('DEBUG: preview: loc=',loc,'\n', dat.describe() )
             #logMsg('DEBUG: preview: loc=',loc,'\n', self.dbDict[loc].head() )
-            self.__previewDF(dat,title=loc)
+            self.__previewDF(dat,title=title+':'+loc)
 
         logMsg('DEBUG: previewing...done')
 
@@ -658,10 +692,10 @@ class tofAnalayser:
         newList = []
         keys = dataFrame.keys()
         for name in nameList:
-            if name in keys:
+            if name in keys and len(dataFrame[name]) > 0:
                 newList.append(name)
             else:
-                logMsg("WARNING: checkNames: dataFrame doesn't contain key/name:",name,", dropped" )
+                logMsg("WARNING: checkNames: dataFrame doesn't contain key/name or name has no data:",name,", dropped" )
                 #TODO raise Exception("WARNING:")
         logMsg('DEBUG: checkNames ...done')
         return newList
@@ -686,7 +720,6 @@ class tofAnalayser:
         logMsg('DEBUG: plotType2new...')
         fig = plt.figure()
         axes = fig.gca()
-        axes.format_xdata = self.xDataDateFormatter
         dataNameList = ['dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr','PPCorr','dTCorr_avg','dTPPCorr_avg']
         self.__plotListForEachLoc( dataFrameDict, nameList=dataNameList , figure=fig )
 
@@ -696,9 +729,7 @@ class tofAnalayser:
         legend = plt.legend(loc='best')
         if hasattr(legend,'get_frame') :
             legend.get_frame().set_alpha(0.8)
-        axes.xaxis.set_minor_locator(AutoMinorLocator())
-        axes.xaxis.set_major_formatter(self.majorTickFormater)
-        fig.subplots_adjust(bottom=0.08)
+        self.configMPLfig(fig)
 
         # auto zoom to important bits
         if 'dT_ns' in self.dbDict['nu1'].keys():
@@ -743,6 +774,7 @@ class tofAnalayser:
             logMsg("DEBUG: doPPPCorr: reprocessing disabled, skipping")
             return None
 
+        logMsg("DEBUG: doAvg: ...")
         window = self.optionsDict['avgWindow']
         for loc in self.locations():
             db = self.dbDict[loc]
@@ -757,6 +789,9 @@ class tofAnalayser:
                     continue
                 avgname=name+'_avg'
                 db[avgname] = pandas.rolling_mean( db[name], window )
+                #TODO: db[avgname] = pandas.rolling_window( db[name], window, 'boxcar', center=True)
+
+        logMsg("DEBUG: doAvg: ...done")
 
     def doCalculations(self):
         if not self.optionsDict['reProcess'] :
