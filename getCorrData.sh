@@ -4,7 +4,7 @@ TopDir="/home/t2k/public_html/post/gpsgroup/ptdata/organizedData/"
 recvList="PT00 PT01 TOKA PT04"
 #recvList="PT00"
 #pathGrps="GPSData_Internal GPSData_External ND280"
-FileList="/tmp/corrDataFileList"
+FileList="/tmp/corrDataFileList.tmp${$}"
 FileNameTemplate='${id}.${typ}.yr${yr}.day${day}'
 finalFileTemplate='${marker}.${dataType}.${dates}.dat'
 zProg="gzip"
@@ -66,15 +66,19 @@ function isBestFile() {
   local file="${1}"
   local daysDone="${2}"
   local thisday="${3}"
-  local fileList="${4}"
-  logMsg "DEBUG: isBestFile ..."
+  local fList="${4}"
+  logMsg "DEBUG: isBestFile: ..."
+  #logMsg "DEBUG: isBestFile: file ${file}"
+  #logMsg "DEBUG: isBestFile: days done ${daysDone}"
+  #logMsg "DEBUG: isBestFile: day ${thisday}"
 
   local base="$(basename ${file})"
   local dir="$(dirname ${file})"
-  local suffix=${file##*day???}
-  local prefix=${file%%${suffix}}
+  local suffix=${file##*day???.}
+  local prefix=${file%%.${suffix}}
 
   # have we done this day before?
+  local day=
   for day in ${daysDone}; do {
     if [[ ${day} == ${thisday} ]]; then {
       # already done it
@@ -83,83 +87,45 @@ function isBestFile() {
     } fi
   } done
 
-  # is it from an external GPS log file?
-  if [[ ${base} =~ .+\.ext\..+ ]] ; then {
-    # yes, external file, not preffered.
-    # is there an internal file for the same day?
-    local filesForThisDay=$( echo "${fileList}" | egrep "\.int\..*day${thisday}" 2>/dev/null | sort )
-  } fi
-  # is it from an internal GPS log file?
-  if [[ ${base} =~ .+\.int\..+ ]] ; then {
-    # yes, internal file, preffered.
-    # is there an external file for the same day?
-    local filesForThisDay=$( echo "${fileList}" | egrep "\.ext\..*day${thisday}" 2>/dev/null | sort )
-  } fi
+  # see how many other files there are for this day.
+  local thisDayList=$(echo "${fList}" | grep "${thisday}" 2>/dev/null )
+  logMsg "DEBUG: isBestFile: ${thisday} list: ${thisDayList}"
 
-  if [ ! -z "${filesForThisDay}" ]; then {
-      # yes, there is at least one other file for that day
-      # what is the best internal file?
-      local bestInt=$(echo "${filesForThisDay}" | tail --lines=1 )
-      # is that newer than this one?
-      local suffixBestInt="${bestInt##*day???.}"
-      if [[ ${suffix} < ${suffixBestInt} ]]; then {
-        # this file sorts lexically before the best, so no good
-        logMsg "DEBUG: isBestFile: ext file suffix:${suffix} < suffix:${suffixBestInt}, skip"
-        return 1
-      } else {
-        # this file sorts lexically after the best internal file, use it!
-        logMsg "DEBUG: isBestFile: ext file suffix:${suffix} > suffix:${suffixBestInt}, good!"
-        return 0
-      } fi
-
-  } fi
-    # no, no internal files, which are preferred, cannot exclude
-
-  # okay, it must be from an internal GPS log, which is preffered
-  # or there isn't another internal file that is prefferred, continue
-  # other external-log-based files should get caught below
-
-  local list=$(ls ${prefix}*)
-  logMsg "DEBUG: isBestFile: list: ${list}"
-  local wc=$(echo "${list}"|wc -l)
+  local wc=$(echo "${thisDayList}"|wc -l)
   logMsg "DEBUG: isBestFile: wc: ${wc}"
   if [ ${wc} -eq 1 ]; then {
     logMsg "DEBUG: isBestFile: only file is best file"
     return 0
   } elif [ ${wc} -gt 1 ]; then {
-    # have to do something
-    echo "${list}" | egrep 'pp20......\.dat' >/dev/null 2>&1
-    if [ $? -eq 0 ]; then {
-      # recent PP files exist, do not use any file without such suffix
-      if expr "${file}" : '.*pp20......\.dat' ; then {
-        # this file has the suffix, just need to find the find the latest one
-        local best=$(ls ${prefix}.pp20* | sort|tail --lines=1 )
-        logMsg "DEBUG: isBestFile: best: ${best}"
-        if [ "${file}" == "${best}" ]; then {
-          logMsg "DEBUG: isBestFile: file is most recent file with pp date"
-          return 0
-        } fi
+    logMsg "DEBUG: isBestFile: not the only file..."
+    local suffixList=''
+    local fname=
+    for fname in ${thisDayList}; do {
+      local newSuffix=${fname##*.pp}
+      #logMsg "DEBUG: isBestFile: building sortable list: newSuffix=${newSuffix}"
+      suffixList="${suffixList} ${newSuffix}"
+    } done
+    #logMsg "DEBUG: isBestFile: suffix list: ${suffixList}"
+    local bestSuffix=$( echo ${suffixList} | awk '{print $1}' )
+    #logMsg "DEBUG: isBestFile: initial suffix: ${bestSuffix}"
+    local suf
+    for suf in ${suffixList}; do {
+      if [[ $suf > ${bestSuffix} ]]; then {
+        bestSuffix=${suf}
+        #logMsg "DEBUG: isBestFile: found better suffix: ${bestSuffix}"
       } else {
-        # file dosen't have the extension, but such files exist, probably shouldn't use
-        logMsg "DEBUG: isBestFile: PP files exists, but this isn't one, ignore"
+        #logMsg "DEBUG: isBestFile: comparison failed, no better suffix: ${bestSuffix}"
         :
       } fi
-    } else {
-      # no PP files exist, must be parts
-      ls ${prefix}*part* | egrep part >/dev/null 2>&1
-      if [ 0 -eq $? ]; then {
-        # found parts
-        logMsg "DEBUG: isBestFile: parts files exists, okay"
-        return 0
-      } else {
-        # unkonwn condition
-        logMsg "ERROR: isBestFile: unexpected condition"
-        exit 1
-      } fi
-      local suffix=${file}##
+    } done
+    logMsg "DEBUG: isBestFile: final best suffix: ${bestSuffix}"
+
+    local ppSuffix=${file##*.pp}
+    if [[ ${bestSuffix} == ${ppSuffix} ]]; then {
+      return 0
     } fi
+
   } fi
-  logMsg "DEBUG: isBestFile: no, done"
   return 1
 }
 
@@ -179,6 +145,8 @@ function chkUniq() {
   sumUniq=$(cksum ${uniqFile} | awk '{print $1}' ) 
   if [[ ${sumNotUniq} == ${sumUniq} ]]; then {
     : # not different, okay
+    rm ${notUniq} ${uniqFile}
+    logMsg "DEBUG: chkUniq: okay  ${sumNotUniq} == ${sumUniq}...done"
     return 0
   } else {
     # different, means recently added file contains duplicate
@@ -188,7 +156,6 @@ function chkUniq() {
     diff ${notUniq} ${uniqFile} |head
     exit 1
   } fi
-  logMsg "DEBUG: chkUniq..."
 
 }
 
@@ -207,7 +174,7 @@ function doit() {
   findFiles "${erex}" "${marker}" > "${FileList}"
 
   # for each type of data, gather up the correction data in to a single file
-  local dataTypeList="xPPSOffset pvtGeo csrs-pp"
+  local dataTypeList="csrs-pp xPPSOffset pvtGeo"
   for dataType in ${dataTypeList}; do {
     # select files for particular data type
     logMsg "DEBUG: working on data type ${dataType}"
@@ -217,8 +184,9 @@ function doit() {
       return 1
     } fi
 
+    logMsg "DEBUG: all files for ${datatype}: ${dataFileList}"
+
     local tmpFile="${dataType}.tmp${$}"
-    > "${tmpFile}"
 
     local daysDone=""
     local prevFile=""
@@ -229,12 +197,15 @@ function doit() {
       logMsg "DEBUG: dir=${dir}"
       logMsg "DEBUG: basename=${basename}"
       local dayOnFile=$( echo ${basename} | sed 's/.*day\(...\).*/\1/' )
+      logMsg "DEBUG: dayOnFile=${dayOnFile}"
 
       # check to make sure we have the right file
-      isBestFile "${file}" "${daysDone}" "${dayOnFile}" "${dataFileList}"; local isBest=${?}
-      if [ ! 0 -eq ${isBest} ]; then {
-        logMsg "WARNING: file ${file} is not the best choice, skipping"
-        continue
+      if [[ ${dataType} == csrs-pp ]]; then {
+        isBestFile "${file}" "${daysDone}" "${dayOnFile}" "${dataFileList}"; local isBest=${?}
+        if [ ! 0 -eq ${isBest} ]; then {
+          logMsg "WARNING: file ${file} is not the best choice, skipping"
+          continue
+        } fi
       } fi
 
       daysDone="${daysDone} ${dayOnFile}"
@@ -257,11 +228,6 @@ function doit() {
 
       prevFile="${file}"
     } done
-
-    if [ "${dryrun}" = "yes" ]; then {
-      logMsg "NOTICE: dry run, skipping processing"
-      continue
-    } fi
 
     local tmpFile2="${tmpFile}.2"
     > "${tmpFile2}"
@@ -294,18 +260,15 @@ function doit() {
     #rm "${tmpFile}" "${tmpFile2}"
     rm "${tmpFile}"
   } done
+  # done with filelist
+  rm "${FileList}" 
 
-  if [ "${dryrun}" = "yes" ]; then {
-    logMsg "NOTICE: dry run, skipping processing"
-    continue
-  } fi
-  
   # combine files of different data types
   # offset + rxClkBias
   local xPPSandClkBias="${marker}.utc,unixtime,xPPSOffset,rxClkBias.${dates}.dat"
   > "${xPPSandClkBias}"
   logMsg "NOTICE: Combining all data for types xPPSOffset and RxClkBias..."
-  join -t ',' -e '' -j 1 -o "1.1,1.3,1.2,2.7" "${marker}.xPPSOffset.${dates}.dat" "${marker}.pvtGeo.${dates}.dat" >> "${xPPSandClkBias}"
+  join --check-order -t ',' -e '' -j 1 -o "1.1,1.3,1.2,2.7" "${marker}.xPPSOffset.${dates}.dat" "${marker}.pvtGeo.${dates}.dat" >> "${xPPSandClkBias}"
   rval=${?}; if [ ! ${rval} -eq 0 ]; then {
     logMsg "WARNING: join failed: code=${rval}, unable to complete first join, skipping others."
     exit 1
@@ -313,27 +276,30 @@ function doit() {
     logMsg "NOTICE: Combining all data for types xPPSOffset and RxClkBias...done"
 
     local resultFile="${marker}.utc,unixtime,xPPSOffset,rxClkBias,rx_clk_ns.${dates}.dat"
+    > ${resultFile}
     # prefix header line
     #echo "#utc_iso8601,unixtime,xPPSOffset,rxClkBias,rx_clk_ns" > "${resultFile}"
 
     # offset + rxClkBias + rx_clk_ns
     logMsg "NOTICE: Combining all data for types xPPSOffset,RxClkBias and rx_clk_ns..."
-    join -t ',' -e '' -j 1 -o "1.1,1.2,1.3,1.4,2.2" "${xPPSandClkBias}" "${marker}.csrs-pp.${dates}.dat" >> "${resultFile}"
+    join --check-order -t ',' -e '' -j 1 -o "1.1,1.2,1.3,1.4,2.2" "${xPPSandClkBias}" "${marker}.csrs-pp.${dates}.dat" >> "${resultFile}"
     rval=${?}; if [ ! ${rval} -eq 0 ]; then {
       logMsg "WARNING: join failed: code=${rval}, unable to complete final join"
       exit 1
     } else {
       logMsg "NOTICE: Combining all data for types xPPSOffset,RxClkBias and rx_clk_ns...done"
     } fi
-  } fi
 
+    sort ${resultFile} > ${resultFile}.tmp
+    mv ${resultFile}.tmp ${resultFile}
+
+  } fi
 
   rm "${xPPSandClkBias}"
   for dataType in ${dataTypeList}; do {
     eval local finalFile="${finalFileTemplate}"
     rm "${finalFile}"
   } done
-  rm "${FileList}" 
 }
 
 ## MAIN ##
