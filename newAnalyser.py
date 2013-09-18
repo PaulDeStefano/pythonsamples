@@ -845,6 +845,9 @@ class tofAnalayser:
         self.doAvg()
         self.preview()
 
+        # store data
+        self.save(suffix='.postCalc')
+
 
 ## MAIN ##
 def runMain():
@@ -857,8 +860,6 @@ def runMain():
 # import correcitions
 # apply corrections
     tof.doCalculations()
-# store data
-    tof.save(suffix='.postCalc')
 # analyse data
     tof.analyse()
 # store analysed data
