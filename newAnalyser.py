@@ -27,6 +27,7 @@ import copy
 import matplotlib.dates as mdates
 from matplotlib.ticker import AutoMinorLocator
 import numpy as np
+from calendar import timegm
 
 # use tex to format text in matplotlib
 #rc('text', usetex=True)
@@ -364,7 +365,7 @@ class tofAnalayser:
                 f,loc,fmt = self.decodeFileName(s)
                 #newData = self._loadFile(filename=fileName,fmt = self.formatDict['default'])
                 newData = self._loadFile(f,loc,fmt)
-                #newData.tz_localize('UTC')
+                newData.tz_localize('UTC')
                 self.addData(newData, loc=loc)
 
             if not self.optionsDict['reProcess']:
@@ -584,7 +585,7 @@ class tofAnalayser:
         if 'unixtime' in dataFrame.keys():
             return dataFrame
         index = dataFrame.index
-        timeList = [ x.strftime('%s') for x in index.tolist() ]
+        timeList = [ timegm(x.utctimetuple()) for x in index ]
         newColumn = pandas.DataFrame( timeList, index=index )
         dataFrame['unixtime'] = newColumn
         return dataFrame
