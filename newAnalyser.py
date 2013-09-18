@@ -219,6 +219,7 @@ class tofAnalayser:
         parser.add_argument('--previewPercent', nargs='?', default=20, help='Sub-sample size for all *preview* plotting' )
         parser.add_argument('--storeOnly', action='store_true', default=False, help='after loading data, save it (if outputFile given), and quit.  Useful for consolidating data into HDF file, faster reading later')
         parser.add_argument('--colsToCSV', nargs='?', default='csvSave', help='Specify the format, explicitly, or the format name to use when writing to CSV files')
+        parser.add_argument('--kdePercent', nargs='?', default=25, help='Sub-sample percent for calculating KDE (of selected datatypes)' )
 
         self.options = parser.parse_args()
         args = self.options
@@ -250,6 +251,7 @@ class tofAnalayser:
         optionsDict['previewPercent'] = int(args.previewPercent)
         optionsDict['storeOnly'] = args.storeOnly
         optionsDict['colsToCSV'] = args.colsToCSV
+        optionsDict['kdeResamplePCT'] = int(args.kdePercent)
 
         ''' we may not always want to do the same calcuations.  If data has been
         loaded from stored data file, then some processing can be skipped.'''
@@ -290,6 +292,10 @@ class tofAnalayser:
                 print(fmt)
 
 #print("DEBUG: negOffset:" + str(negOffset) )
+
+
+    def __getResampleSize(self, percent=10):
+        return str(int(np.floor(100/percent)))+'S'
 
     def parseDictOption( self,key,s,delim2=':',cast=lambda x: int(x) ):
         self.optionsDict[key] = self.strToDict(s,delim2=delim2,cast=cast)
@@ -517,8 +523,6 @@ class tofAnalayser:
             if 'rxClkBias' in dat.keys():
                 dat['rxClkBias_ns'] = dat['rxClkBias'] * 1E6
 
-            '''create unixtime field'''
-            unixtime = dat.index
             assert( dat is self.dbDict[loc] )
 
     def doXPPScorr(self):
@@ -749,9 +753,35 @@ class tofAnalayser:
         plt.show()
         logMsg('DEBUG: plotType2: done...')
 
+    def doHist(self, dbDict, bins=50):
+        logMsg("DEBUG: doHist:...")
+        keys = dbDict.keys()
+        #histKeys = ['dT_ns','dTCorr','dTPPCorr','dTPPCorr_avg']
+        histKeys = ['dT_ns','dTCorr','dTPPCorr']
+        sampleSize = self.__getResampleSize(self.optionsDict['kdeResamplePCT'])
+        bins=50
+        for loc in keys:
+            df = dbDict[loc]
+            names = list( set(histKeys).intersection(set(df.keys())) )
+            #logMsg("DEBUG: using names:",names)
+            dfView = df[names]
+            dfView = dfView.resample(sampleSize)
+            dfView = dfView.dropna()
+            #logMsg( dfView.head() )
+            #logMsg("DEBUG: using dfView:",dfView.head())
+            #self.__previewDF(dfView)
+            #dfView.hist(bins=bins)
+            #fig=plt.gcf()
+            #fig.suptitle(loc)
+            dfView.plot(kind='kde',subplots=True,style='k-',title=loc+' (downsampled)')
+
+        plt.show()
+        logMsg("DEBUG: doHist:...done")
+
     def viewBasic(self):
         '''gather data from different locations into one plot'''
         logMsg('DEBUG: viewBasic...')
+        self.doHist(self.dbDict)
         self.plotType2new(self.dbDict)
         logMsg('DEBUG: viewBasic...done')
 
@@ -792,6 +822,9 @@ class tofAnalayser:
                 #TODO: db[avgname] = pandas.rolling_window( db[name], window, 'boxcar', center=True)
 
         logMsg("DEBUG: doAvg: ...done")
+
+    def doFreq(self):
+        pass
 
     def doCalculations(self):
         if not self.optionsDict['reProcess'] :
