@@ -375,7 +375,13 @@ class tofAnalayser:
                 self.optionsDict['reProcess'] = True
 
         else:
-            logMsg("WARNING: no inputFiles to load")
+            logMsg("WARNING: no new inputFiles to load")
+
+        # store data
+        self.save()
+        if self.optionsDict['storeOnly'] :
+            logMsg("DEBUG: storeOnly specified, exiting now.")
+            exit(0)
 
     def _getFormat(self,fmt):
         if fmt in self.formatDict.keys() :
@@ -754,13 +760,13 @@ class tofAnalayser:
         plt.show()
         logMsg('DEBUG: plotType2: done...')
 
-    def doHist(self, dbDict, bins=50):
+    def plotHist(self, dbDict, bins=50):
         logMsg("DEBUG: doHist:...")
         keys = dbDict.keys()
         #histKeys = ['dT_ns','dTCorr','dTPPCorr','dTPPCorr_avg']
         histKeys = ['dT_ns','dTCorr','dTPPCorr']
         sampleSize = self.__getResampleSize(self.optionsDict['kdeResamplePCT'])
-        bins=50
+        #bins=50
         for loc in keys:
             df = dbDict[loc]
             names = list( set(histKeys).intersection(set(df.keys())) )
@@ -770,7 +776,7 @@ class tofAnalayser:
             dfView = dfView.dropna()
             #logMsg( dfView.head() )
             #logMsg("DEBUG: using dfView:",dfView.head())
-            #self.__previewDF(dfView)
+            self.__previewDF(dfView, debug=True)
             #dfView.hist(bins=bins)
             #fig=plt.gcf()
             #fig.suptitle(loc)
@@ -782,7 +788,7 @@ class tofAnalayser:
     def viewBasic(self):
         '''gather data from different locations into one plot'''
         logMsg('DEBUG: viewBasic...')
-        self.doHist(self.dbDict)
+        self.plotHist(self.dbDict)
         self.plotType2new(self.dbDict)
         logMsg('DEBUG: viewBasic...done')
 
@@ -791,6 +797,7 @@ class tofAnalayser:
         logMsg("DEBUG: droping NAN values...")
         for loc in self.dbDict.keys():
             dat = self.dbDict[loc]
+            #self.dbDict[loc] = dat[ - isnull(dat['dT']) ]
             self.dbDict[loc] = dat.dropna(how='any')
             logMsg("DEBUG: after dropna:",dat)
         logMsg("DEBUG: droping NAN values...done")
@@ -845,10 +852,6 @@ def runMain():
     tof.configure()
 # import main data
     tof.loadData()
-# store data
-    tof.save()
-    if tof.optionsDict['storeOnly'] :
-        exit(0)
 # organize data
     tof.prep()
 # import correcitions
