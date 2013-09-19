@@ -79,6 +79,20 @@ def headtail(dataFrame):
     t = dataFrame.tail(2)
     return str(h)+str(t)
 
+def getUniqs(seq):
+    seen = set()
+    seen_add = seen.add
+    return [ x for x in seq if x not in seen and not seen_add(x)]
+
+def getDups(seq):
+    seen = set()
+    seen_add = seen.add
+    dups = set()
+    for x in seq:
+        if x in seen: dups.add(x)
+        seen_add(x)
+    return dups
+
 class tofAnalayser:
     """Draft Implimentation of TOF Data Analyser Module"""
     release = releaseName = '2013.09.01'
@@ -202,6 +216,7 @@ class tofAnalayser:
         parser.add_argument('--offsets', nargs='?', help='File continating xPPSoffset values (from sbf2offset.py)')
         parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='Boolean.  Add offset values to TIC measurements (dT)')
         parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='Boolean. Subtract offset values from TIC measurements (dT)')
+        parser.add_argument('--histogram', nargs='?', default=False, help='Make histograms')
         parser.add_argument('--histbins', nargs='?', default=50, help='Number of bins in histograms')
         parser.add_argument('--shiftOffset', '-s', nargs='?', default=0, help='shift time of xPPSOffset corrections wrt. TIC measurements by this many seconds')
         parser.add_argument('--importLimit', '-L', nargs='?', default=100000000, help='limit imported data to the first <limit> lines')
@@ -232,6 +247,7 @@ class tofAnalayser:
         optionsDict['offsetFile'] = args.offsets
         optionsDict['negOffset'] = args.negOffset
         optionsDict['numBins'] = int(args.histbins)
+        optionsDict['histogram'] = args.histogram
         optionsDict['shiftOffset'] = args.shiftOffset
         optionsDict['importLimit'] = int(args.importLimit)
         optionsDict['storeFilePrefix'] = args.outputPrefix
@@ -376,12 +392,27 @@ class tofAnalayser:
 
         else:
             logMsg("WARNING: no new inputFiles to load")
+        
+        ''' check for duplicates indecies'''
+        logMsg("DEBUG: checking for duplcates")
+        for db in self.dbDict.values() :
+            dupList = getDups(list(db.index))
+            #isUniq = self.__listIsUniq(list(db.index))
+            if list(dupList) != list():
+                logMsg("DEBUG: loaded data contains duplicate index:",dupList)
+                raise Exception("ERROR: loaded data contains duplicate index")
+
+        ''' Drop data we don't need '''
+        self.__dropNAN()
 
         # store data
         self.save()
         if self.optionsDict['storeOnly'] :
             logMsg("DEBUG: storeOnly specified, exiting now.")
             exit(0)
+
+        self.preview(previewPoint="After Loading", debug=False)
+
 
     def _getFormat(self,fmt):
         if fmt in self.formatDict.keys() :
@@ -451,11 +482,13 @@ class tofAnalayser:
     def __previewDF(self,previewDF, title=None,debug=False, **kwargs):
         if debug and not self.options.debug:
             return
-        logMsg("DEBUG: previewDF ...")
+
+        logMsg("DEBUG: previewDF ",title,"...")
+        #logMsg('DEBUG: preview: \n', previewDF.describe() )
         if None == title:
             title=self.options.desc
-        print previewDF.head(2)
-        print previewDF.tail(2)
+        #print previewDF.head(2)
+        #print previewDF.tail(2)
         #previewDF.plot(grid=True,title='Preview:'+title)
         #for key in previewDF.keys():
         #    previewDF[key].plot(style=self.styleMap[key])
@@ -473,8 +506,11 @@ class tofAnalayser:
         plt.show()
         logMsg("DEBUG: previewDF ...done")
 
-    def preview(self):
-        logMsg('DEBUG: previewing...')
+    def preview(self,previewPoint=None,debug=False):
+        if debug and not self.options.debug:
+            return
+
+        logMsg('DEBUG: previewing at ',previewPoint,'...')
         logMsg('DEBUG: ', self.dbDict.keys() )
         title = self.optionsDict['description']
         for loc in self.dbDict.keys():
@@ -482,11 +518,9 @@ class tofAnalayser:
             if dat.empty:
                 logMsg("DEBUG: empty data for location:",loc,"skipping")
                 continue
-            logMsg('DEBUG: preview: loc=',loc,'\n', dat.describe() )
-            #logMsg('DEBUG: preview: loc=',loc,'\n', self.dbDict[loc].head() )
-            self.__previewDF(dat,title=title+':'+loc)
+            self.__previewDF(dat,title=title+':'+loc+'@'+previewPoint,debug=debug)
 
-        logMsg('DEBUG: previewing...done')
+        logMsg('DEBUG: previewing at ',previewPoint,'...done')
 
     def prep(self):
         '''fix up stuff before other calculations'''
@@ -500,7 +534,7 @@ class tofAnalayser:
         '''drop NAN since we are sure we are going to re calculate
         If not done here, should include condition on reprocessing.
         shold be first thing after loadFile'''
-        self.__dropNAN()
+        #self.__dropNAN()
 
         for loc in self.dbDict.keys():
             dat = self.dbDict[loc]
@@ -533,13 +567,13 @@ class tofAnalayser:
             assert( dat is self.dbDict[loc] )
 
     def doXPPScorr(self):
+        ''' apply xppsoffset '''
         logMsg("DEBUG: reProcess: ",self.optionsDict['reProcess'])
         if not self.optionsDict['reProcess'] :
             logMsg("DEBUG: doXPPScorr: reprocessing disabled, skipping")
             return None
 
         logMsg('DEBUG: xPPScorr...')
-# apply xppsoffset
         for loc in self.dbDict.keys():
             dat = self.dbDict[loc]
             if dat.empty:
@@ -557,11 +591,11 @@ class tofAnalayser:
             dat['dTCorr'] = dat.dT_ns.shift(shiftVal) + coeff * dat.xPPSOffset 
             #dat[['dT_ns','dTCorr','xPPSOffset']].plot(title=loc+':'+self.options.desc,grid=True)
             #plt.show()
-            self.__previewDF( dat[['dT_ns','dTCorr','xPPSOffset']] ,title='xPPSOffset:'+loc, debug=True)
+            self.__previewDF( dat[['dT_ns','dTCorr','xPPSOffset']] ,title='@xPPSOffset:'+loc, debug=True)
         logMsg('DEBUG: xPPScorr...done')
 
     def doPPPcorr(self):
-# find PPP Correction & apply
+        ''' find PPP Correction & apply '''
         if not self.optionsDict['reProcess'] :
             logMsg("DEBUG: doPPPCorr: reprocessing disabled, skipping")
             return None
@@ -582,7 +616,7 @@ class tofAnalayser:
             dat['dTPPCorr'] = dat.dTCorr - dat.rxClkBias_ns + dat.rx_clk_ns
             #dat['dT-StnClkOff'] = dat.dT_ns - dat.rx_clk_ns
 
-            self.__previewDF(dat[['dT_ns','PPCorr','dTPPCorr']],title='PPPCorrectoins:'+loc,debug=True)
+            self.__previewDF(dat[['dT_ns','PPCorr','dTPPCorr']],title='@PPPCorrectoins:'+loc,debug=True)
 
         logMsg('DEBUG: PPCorr...done')
 
@@ -761,6 +795,10 @@ class tofAnalayser:
         logMsg('DEBUG: plotType2: done...')
 
     def plotHist(self, dbDict, bins=50):
+        if not self.optionsDict['histogram'] :
+            logMsg("DEBUG: skipping histogram (need --histogram)")
+            return
+
         logMsg("DEBUG: doHist:...")
         keys = dbDict.keys()
         #histKeys = ['dT_ns','dTCorr','dTPPCorr','dTPPCorr_avg']
@@ -776,10 +814,11 @@ class tofAnalayser:
             dfView = dfView.dropna()
             #logMsg( dfView.head() )
             #logMsg("DEBUG: using dfView:",dfView.head())
-            self.__previewDF(dfView, debug=True)
+            self.__previewDF(dfView, title=loc+'@plotHist',debug=True)
             #dfView.hist(bins=bins)
             #fig=plt.gcf()
             #fig.suptitle(loc)
+            #TODO:make histogram and kde on same plot
             dfView.plot(kind='kde',subplots=True,style='k-',title=loc+' (downsampled)')
 
         plt.show()
@@ -797,8 +836,8 @@ class tofAnalayser:
         logMsg("DEBUG: droping NAN values...")
         for loc in self.dbDict.keys():
             dat = self.dbDict[loc]
-            #self.dbDict[loc] = dat[ - isnull(dat['dT']) ]
-            self.dbDict[loc] = dat.dropna(how='any')
+            self.dbDict[loc] = dat[ - pandas.isnull(dat['dT']) ]  # safe, only missing dT
+            #self.dbDict[loc] = dat.dropna(how='any')  # all rows missing data in *any* column
             logMsg("DEBUG: after dropna:",dat)
         logMsg("DEBUG: droping NAN values...done")
 
@@ -831,22 +870,62 @@ class tofAnalayser:
 
         logMsg("DEBUG: doAvg: ...done")
 
+    def __listIsUniq(self, l) :
+        logMsg('DEBUG: listIsUniq: ...')
+        knownList = list()
+        for i in l:
+            if (i in knownList) :
+                logMsg('DEBUG: listIsUniq: found duplicate:',knownList[-1],' @',len(knownList)-1 )
+                return False
+            else :
+                knownList.append(i)
+                #logMsg('DEBUG: listIsUniq: knownList:',knownList[-1])
+        logMsg('DEBUG: listIsUniq: ...done')
+        return True
+
     def doFreq(self):
-        pass
+        '''Calculate first difference (aka fractional freq. error) and second 
+        differences.'''
+        logMsg('DEBUG: doFreq: ...')
+        freqNameList=['dTCorr','dTPPCorr']
+        for db in self.dbDict.values():
+            nameList = filter(lambda x: x in freqNameList, db.keys() )
+            for name in nameList:
+                logMsg('DEBUG: doFreq: working on datatype:',name)
+                '''get the data sequence'''
+                oldSeq = db[name]
+                #dTPPCorr = pandas.rolling_mean(db['dTPPCorr'], window=100)
+                '''calculate first difference'''
+                diff1 = oldSeq - oldSeq.shift(1)
+                diff1 = diff1.dropna()
+                '''filter results statistically, kluge for non-contiguous data series'''
+                stddev = diff1.std()
+                mean = diff1.mean()
+                withinLimits = (diff1 > mean-10*stddev) & (diff1 < mean + 10*stddev)
+                diff1 = diff1[withinLimits]
+                #dupList = getDups(list(diff1.index))
+                #if list(dupList) != list():
+                #    logMsg('DEBUG: doFreq: diff1 has duplcates:',dupList)
+                #    raise Exception('ERROR: doFreq: diff1 has duplcates')
+                '''store result'''
+                db[name+'_1st'] = diff1
+                #diff1.resample('3S').dropna().plot(kind='kde')
+            self.__previewDF(db, title="in doFreq", debug=True)
+
+        logMsg('DEBUG: doFreq: ...done')
 
     def doCalculations(self):
         if not self.optionsDict['reProcess'] :
             logMsg("DEBUG: doCalculations: reprocessing disabled, skipping")
             return None
         self.doXPPScorr()
-        #self.preview()
         self.doPPPcorr()
-        #self.preview()
         self.doAvg()
-        self.preview()
+        self.doFreq()
 
         # store data
         self.save(suffix='.postCalc')
+        self.preview(previewPoint='After Calcuations',debug=False)  # always preview here
 
 
 ## MAIN ##
