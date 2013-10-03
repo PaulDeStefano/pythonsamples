@@ -28,17 +28,25 @@ import matplotlib.dates as mdates
 from matplotlib.ticker import AutoMinorLocator
 import numpy as np
 from calendar import timegm
+import scipy as sp
 
 # use tex to format text in matplotlib
 #rc('text', usetex=True)
+mpl.rcParams['figure.dpi']          = 100
+# large figures
 mpl.rcParams['figure.figsize']      = (14,9)
 mpl.rcParams['figure.facecolor']    = '0.75'
-mpl.rcParams['figure.dpi']          = 100
-#mpl.rcParams['figure.subplot.left'] = 0.06
 mpl.rcParams['figure.subplot.left'] = 0.07
 mpl.rcParams['figure.subplot.bottom'] = 0.08
 mpl.rcParams['figure.subplot.right'] = 0.96
 mpl.rcParams['figure.subplot.top']  = 0.96 
+# small figures
+mpl.rcParams['figure.figsize']      = (10,8.0)
+mpl.rcParams['figure.subplot.left'] = 0.08
+mpl.rcParams['figure.subplot.bottom'] = 0.14
+mpl.rcParams['figure.subplot.right'] = 0.95
+mpl.rcParams['figure.subplot.top']  = 0.94 
+
 mpl.rcParams['grid.alpha']          = 0.4
 mpl.rcParams['axes.grid']           = True
 mpl.rcParams['axes.facecolor']      = '0.90'
@@ -50,16 +58,16 @@ mpl.rc('font'
         ,size=9 )
 mpl.rc('legend'
         ,markerscale=2.0
-        ,fontsize='small')
+        ,fontsize='medium')
 mpl.rc('text'
         ,usetex=False )
 mpl.rcParams['xtick.major.size']    = 10.0
 mpl.rcParams['xtick.major.width']   = 2.0
-mpl.rcParams['xtick.labelsize']     = 'medium'
+mpl.rcParams['xtick.labelsize']     = 'large'
 mpl.rcParams['xtick.direction']     = 'inout'
 mpl.rcParams['ytick.major.size']    = 10.0
 mpl.rcParams['ytick.major.width']   = 2.0
-mpl.rcParams['ytick.labelsize']     = 'medium'
+mpl.rcParams['ytick.labelsize']     = 'large'
 mpl.rcParams['ytick.direction']     = 'inout'
 
 # disable sparse x ticks, doesn't work
@@ -92,6 +100,48 @@ def getDups(seq):
         if x in seen: dups.add(x)
         seen_add(x)
     return dups
+
+def logRange(minPower,maxPower,base=10):
+    r = list()
+    power = minPower
+    while power < maxPower :
+        start = base**power
+        end = base**(power+1)
+        newr = range(start, end, start)
+        r = r + newr
+        power += 1
+    return r
+
+def allan(phases, tau, base=1):
+    """
+    allan(t, y, tau, base)
+    Allan variance calculation
+
+    Input variables:
+    ----------------
+    t : time of measurement
+    freq : measured frequency
+    tau : averaging time
+    base : base frequency
+
+    Output variables:
+    -----------------
+    s : Squared Allan variance
+    """
+    phaseArray = np.array(phases)
+    freq = phaseArray[1:] - phaseArray[0:-1]
+    # Divide time up to 'tau' length units for averaging
+    times = np.arange(0,phaseArray.size-1, tau)
+    # Create temporary variable for fractional frequencies
+    vari = np.zeros(len(times))
+    for tstep in range(0, len(times)):
+            # Get the data within the time interval
+        data = freq[ times[tstep] : (times[tstep] + tau) ]
+        # Fractional frequency calculation
+        vari[tstep] = (sp.mean(data) - base) / base
+    # Squared Allan variance
+    s = sp.mean((vari[0:-1] - vari[1:]) ** 2) / 2
+    return s 
 
 class tofAnalayser:
     """Draft Implimentation of TOF Data Analyser Module"""
@@ -236,6 +286,7 @@ class tofAnalayser:
         parser.add_argument('--storeOnly', action='store_true', default=False, help='after loading data, save it (if outputFile given), and quit.  Useful for consolidating data into HDF file, faster reading later')
         parser.add_argument('--colsToCSV', nargs='?', default='csvSave', help='Specify the format, explicitly, or the format name to use when writing to CSV files')
         parser.add_argument('--kdePercent', nargs='?', default=25, help='Sub-sample percent for calculating KDE (of selected datatypes)' )
+        parser.add_argument('--preview', action='store_true', default=False, help='Force preview before analysis')
 
         self.options = parser.parse_args()
         args = self.options
@@ -269,6 +320,7 @@ class tofAnalayser:
         optionsDict['storeOnly'] = args.storeOnly
         optionsDict['colsToCSV'] = args.colsToCSV
         optionsDict['kdeResamplePCT'] = int(args.kdePercent)
+        optionsDict['preview'] = args.preview
 
         ''' we may not always want to do the same calcuations.  If data has been
         loaded from stored data file, then some processing can be skipped.'''
@@ -396,8 +448,7 @@ class tofAnalayser:
         ''' check for duplicates indecies'''
         logMsg("DEBUG: checking for duplcates")
         for db in self.dbDict.values() :
-            dupList = getDups(list(db.index))
-            #isUniq = self.__listIsUniq(list(db.index))
+            dupList = db.index.get_duplicates()
             if list(dupList) != list():
                 logMsg("DEBUG: loaded data contains duplicate index:",dupList)
                 raise Exception("ERROR: loaded data contains duplicate index")
@@ -411,7 +462,7 @@ class tofAnalayser:
             logMsg("DEBUG: storeOnly specified, exiting now.")
             exit(0)
 
-        self.preview(previewPoint="After Loading", debug=False)
+        #self.preview(previewPoint="After Loading", debug=False)
 
 
     def _getFormat(self,fmt):
@@ -654,11 +705,11 @@ class tofAnalayser:
             #self.__createUNIXtime()
             for loc in self.locations():
                 db = self.dbDict[loc]
-                db = np.round(db,3)
+                newdb = np.round(db,3)
                 self.__addUNIXTimeColumn(db)
                 fileName =  fileNamePrefix+'.'+loc+'.csv'+suffix
                 logMsg("DEBUG: saveToFile: saving to CSV store in file",fileName)
-                db.to_csv(fileName
+                newdb.to_csv(fileName
                         ,header=True
                         ,cols=names
                         ,sep=separator
@@ -666,6 +717,7 @@ class tofAnalayser:
                         ,index_label='utc'
                         ,na_rep='NaN'
                         )
+                del newdb
 
         else :
             logMsg("DEBUG: saveToFile: couldn't save data, unrecognized output type:",typ)
@@ -761,11 +813,18 @@ class tofAnalayser:
         logMsg('DEBUG: plotListForEachLoc ...done')
         return figure
 
-    def plotType2new(self,dataFrameDict ):
+    def plotType2new(self,dataFrameDict,nameList=None,fig=None,zoomData='dT_ns' ):
         logMsg('DEBUG: plotType2new...')
-        fig = plt.figure()
+
+        show = False
+        if fig == None:
+            fig = plt.figure()
+            show = True
+        if nameList == None:
+            dataNameList = ['dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr','PPCorr','dTCorr_avg','dTPPCorr_avg']
+        else:
+            dataNameList = nameList
         axes = fig.gca()
-        dataNameList = ['dT_ns','xPPSOffset','dTCorr','rxClkBias_ns','rx_clk_ns','dTPPCorr','PPCorr','dTCorr_avg','dTPPCorr_avg']
         self.__plotListForEachLoc( dataFrameDict, nameList=dataNameList , figure=fig )
 
         title = self.optionsDict['description']
@@ -777,13 +836,14 @@ class tofAnalayser:
         self.configMPLfig(fig)
 
         # auto zoom to important bits
-        if 'dT_ns' in self.dbDict['nu1'].keys():
-            dTmax=self.dbDict['nu1']['dT_ns'].max()
-            dTmin=self.dbDict['nu1']['dT_ns'].min()
+        if zoomData in nameList and zoomData in self.dbDict['nu1'].keys():
+            dTmax=self.dbDict['nu1'][zoomData].max()
+            dTmin=self.dbDict['nu1'][zoomData].min()
             axes.set_ylim(bottom=dTmin-5,top=dTmax+5)
         
         #plt.draw() # redraw
-        plt.show()
+        if show == True:
+            plt.show()
         logMsg('DEBUG: plotType2new...')
 
     def plotType1(self, dataFrame):
@@ -824,12 +884,46 @@ class tofAnalayser:
         plt.show()
         logMsg("DEBUG: doHist:...done")
 
+    def viewProgressive(self):
+        '''show progression of corrections'''
+        logMsg('DEBUG: viewProgressive...')
+
+        fig = plt.figure()
+        nameList = ['dT_ns']
+        self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+
+        fig = plt.figure()
+        nameList = ['dT_ns','dTCorr']
+        self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+
+        fig = plt.figure()
+        nameList = ['dTCorr','dTPPCorr']
+        self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+
+        fig = plt.figure()
+        nameList = ['rxClkBias','rx_clk_ns']
+        self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+
+        plt.show()
+        logMsg('DEBUG: viewProgressive...done')
+
     def viewBasic(self):
         '''gather data from different locations into one plot'''
         logMsg('DEBUG: viewBasic...')
         self.plotHist(self.dbDict)
         self.plotType2new(self.dbDict)
         logMsg('DEBUG: viewBasic...done')
+
+    def viewSimple(self):
+        '''show progression of corrections'''
+        logMsg('DEBUG: viewSimple...')
+
+        fig = plt.figure()
+        nameList = ['dT_ns','dTCorr','dTPPCorr','dTCorr_avg','dTPPCorr_avg']
+        self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+
+        plt.show()
+        logMsg('DEBUG: viewSimple...done')
 
     def __dropNAN(self):
         '''drop unusable values'''
@@ -841,8 +935,95 @@ class tofAnalayser:
             logMsg("DEBUG: after dropna:",dat)
         logMsg("DEBUG: droping NAN values...done")
 
+    def avarBad(self, phaseList, tau0_samples, mStride, overlap=False):
+        phases = np.array( phaseList )
+        if overlap : tau = 1
+        else : tau = mStride * 1
+        #logMsg('DEBUG: avar: starting on sequence of length:',len(phases))
+        #phaseRange = xrange(0,len(phases),tau)
+        diff2List = list()
+        N = len(phases)
+        logMsg('DEBUG: avar: starting on sequence of length:',len(phases),'w/ N={},tau={},mStride={}'.format(N,tau,mStride) )
+        #for i in xrange(0,(N-2*mStride+1),mStride) :
+        for i in xrange(0,(N-2*mStride)+1,mStride) :
+            y1 = phases[i+mStride] - phases[i]
+            y2 = phases[i+(2*mStride)] - phases[i+mStride]
+            #logMsg('DEBUG: y1:',y1,' y2:',y2)
+            diff2List.append( y2 - y1 )
+        diff2 = np.array( diff2List ) # convert to np.array
+        M = diff2.size
+        #avar = np.sum( np.square(diff2) ) * (1/(2*mStride**2*(M-2*mStride+1)))
+        logMsg('DEBUG: avar: diff2={}..{}'.format(diff2[0],diff2[diff2.size-1]) )
+        squared = np.square(diff2)
+        logMsg('DEBUG: avar: squared={}..{}'.format(squared[0],squared[diff2.size-1]) )
+        summed = np.sum( squared ) 
+        logMsg('DEBUG: avar: sum = ',summed )
+        avar = np.sum( np.square(diff2) ) * (1.0/(2*(M-1)))
+        return avar
+
+    """
+        def adev(self, phaseList, tau0_samples, m_avgStride, overlap=False):
+        #assert( type(phases) == np.ndarray )
+        phases = np.array( phaseList )
+        N = len(phases)
+        logMsg('DEBUG: adev: starting on sequence of length:',len(phases))
+        tau = tau0_samples * m_avgStride
+        if overlap: stride = tau
+        else: stride = tau0_samples
+        diff2 = list()
+        timesList = xrange(1,N,stride)
+        logMsg('DEBUG: adev: timesList:{}, tau:{}, step:{}'.format(timesList,tau,step) )
+
+        for i in timesList:
+            y1 = phases[i+tau] - phases[i] # first first diff/frac.freq.
+            y2 = phases[i] - phases[i-tau] # second first diff/frac.freq.
+            diff2.append(y1 - y2)         # second difference of frac. freq
+
+        logMsg('DEBUG: adev: diff2:',diff2)
+        if len(diff2) > 0 : adev = np.sqrt( np.sum( (diff2)/(2.0*(N-2)) ) )
+        else: adev = 0.0
+        return adev
+    """
+        
+    def viewFrequency(self):
+        '''Show the frecuency anlaysis I.E.: frac freq error, AVAR, TDEV, etc
+        '''
+        
+        logMsg('DEBUG: viewFrequency:...')
+        avgSamples = logRange(1,7)
+        measUnit = 10**-9 #seconds
+        #seq = self.dbDict['nu1']['dT_ns'].dropna() * measUnit
+        seq = self.dbDict['nu1']['dTPPCorr'].dropna()
+        seqLength = len(seq)
+        adevList = list()
+        avgCompleteList = list()
+        tau0 = 1 # time between samples, (in samples, currently)
+        for m in avgSamples:
+            if m > seqLength: 
+                break  # stop if we don't have enough points to do more averaging
+            #avar = self.avar( seq, tau0_samples=1, mStride=m, overlap=False)
+            avar = allan( seq,tau=m*tau0, base=tau0)
+            logMsg('DEBUG: viewFrequency: avar:',avar,' avg period:',m)
+            adevList.append( np.sqrt(avar)*measUnit )
+            avgCompleteList.append(m)
+
+        plt.figure()
+        plt.loglog(avgCompleteList, adevList , linestyle='-', marker='o', color='b')
+        plt.suptitle('ADEV')
+        plt.show()
+
+        #avarSeq = pandas.expanding_apply( seq,self.avar,min_periods=10 ) # too slow!
+        #avarSeq.plot(logy=True,title='test AVAR dTCorr nu1')
+
+        logMsg('DEBUG: viewFrequency: done')
+
     def analyse(self):
         logMsg('DEBUG: Analyse...')
+        if self.optionsDict['preview'] == True:
+            self.preview(previewPoint='Before analysis',debug=False)  # always preview here
+        self.viewSimple()
+        self.viewProgressive()
+        self.viewFrequency()
         self.viewBasic()
         logMsg('DEBUG: Analyse...done')
 
@@ -869,19 +1050,6 @@ class tofAnalayser:
                 #TODO: db[avgname] = pandas.rolling_window( db[name], window, 'boxcar', center=True)
 
         logMsg("DEBUG: doAvg: ...done")
-
-    def __listIsUniq(self, l) :
-        logMsg('DEBUG: listIsUniq: ...')
-        knownList = list()
-        for i in l:
-            if (i in knownList) :
-                logMsg('DEBUG: listIsUniq: found duplicate:',knownList[-1],' @',len(knownList)-1 )
-                return False
-            else :
-                knownList.append(i)
-                #logMsg('DEBUG: listIsUniq: knownList:',knownList[-1])
-        logMsg('DEBUG: listIsUniq: ...done')
-        return True
 
     def doFreq(self):
         '''Calculate first difference (aka fractional freq. error) and second 
