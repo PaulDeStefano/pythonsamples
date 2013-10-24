@@ -16,6 +16,9 @@ dryrun="no"
 logLevel=3
 tmpFile='getCorrData.tmp${$}'
 
+#trap 'echo SIGINT trap; rm ${FileList} ${tmpFile}; exit 255' 1 2 INT HUP
+trap 'echo EXIT trap; rm ${FileList} ${tmpFile}' EXIT
+
 function logMsg() {
     case "${@}" in 
       DEBUG:* ) [ ${logLevel} -lt 3 ] && return 0 ;;
@@ -39,8 +42,8 @@ logMsg "DEBUG: finding Corrections Data files for marker ${marker}, day NOTYETIM
     ( /usr/bin/find ${TopDir}/ \
         -type f -name "*${marker}*day*.dat*" \
         2>/dev/null \
-        | egrep -i "${extraRegex}" \
-        | sort \
+        | /usr/bin/egrep -i "${extraRegex}" \
+        | /usr/bin/sort \
     )
 
 }
@@ -138,7 +141,7 @@ function chkUniq() {
 
   local notUniq=chkUniq1.tmp
   local uniqFile=chkUniq2.tmp
-  cat "${buildFile}" | cut -d',' -f1 | egrep -v '^#|[a-df-zA-DF-SU-Z]' | sort > ${notUniq}
+  cat "${buildFile}" | cut -d',' -f1 | /usr/bin/egrep -v '^#|[a-df-zA-DF-SU-Z]' | /usr/bin/sort > ${notUniq}
   cat "${notUniq}" | uniq > ${uniqFile}
 
   sumNotUniq=$(cksum ${notUniq} | awk '{print $1}' ) 
@@ -172,19 +175,25 @@ function doit() {
 
   # find all files
   findFiles "${erex}" "${marker}" > "${FileList}"
+  local len=$(wc -l ${FileList})
+  if [ ${len} -eq 0 ]; then {
+    echo "WARNING: couldn't find any files for marker ${marker}, skipping marker"
+    rm ${FileList}
+    return 0
+  } fi
 
   # for each type of data, gather up the correction data in to a single file
-  local dataTypeList="csrs-pp xPPSOffset pvtGeo"
+  local dataTypeList="xPPSOffset pvtGeo csrs-pp"
   for dataType in ${dataTypeList}; do {
     # select files for particular data type
     logMsg "DEBUG: working on data type ${dataType}"
-    local dataFileList=$(egrep "${dataType}" ${FileList})
+    local dataFileList=$(/usr/bin/egrep "${dataType}" ${FileList})
     if [ -z "${dataFileList}" ]; then {
-      logMsg "WARNING: couldn't find any data files of type ${dataType} for ${marker}, skipping marker"
-      return 1
+      logMsg "WARNING: couldn't find any data files of type ${dataType} for ${marker}, skipping type"
+      continue
     } fi
 
-    logMsg "DEBUG: all files for ${datatype}: ${dataFileList}"
+    logMsg "DEBUG: all files for ${dataType}: ${dataFileList}"
 
     local tmpFile="${dataType}.tmp${$}"
 
@@ -218,7 +227,9 @@ function doit() {
       # decompress file & store data in temp file
       decompFile "${file}" >> "${tmpFile}"
       # check to see if the data has been ruined by duplicate times
-      chkUniq "${tmpFile}" "${file}" "${prevFile}"
+      if [ "${checkUnique}" = "yes" ]; then
+        chkUniq "${tmpFile}" "${file}" "${prevFile}"
+      fi
       local rval="${?}"
       if [ ! ${rval} -eq 0 ]; then {
         logMsg "WARNING: file didn't decompress, continuing assuming it's not compressed"
@@ -229,11 +240,16 @@ function doit() {
       prevFile="${file}"
     } done
 
+    if [ "${dryrun}" = "yes" ]; then {
+      logMsg "NOTICE: dry run, skipping processing"
+      rm "${tmpFile}"
+      continue
+    } fi
     local tmpFile2="${tmpFile}.2"
     > "${tmpFile2}"
     # check for headers
 #    logMsg "DEBUG: checking for headers"
-#    local header=$( egrep '[a-df-zA-DF-SU-Z]' "${tmpFile}" | uniq )
+#    local header=$( /usr/bin/egrep '[a-df-zA-DF-SU-Z]' "${tmpFile}" | uniq )
 #    local numHeaders=$(echo "${header}"|wc -l)
 #    if [ ${numHeaders} -gt 1 ]; then {
 #      logMsg "ERROR: found more than one type of header in file:"
@@ -251,7 +267,7 @@ function doit() {
     # sort all data of this type into new file with just one header
     logMsg "DEBUG: sorting file w/o headers"
     eval local finalFile="${finalFileTemplate}"
-    cat "${tmpFile}" | egrep -v '^#|[a-df-zA-DF-SU-Z]'| sort -t ',' -k1 >> "${tmpFile2}"
+    cat "${tmpFile}" | /usr/bin/egrep -v '^#|[a-df-zA-DF-SU-Z]'| /usr/bin/sort -t ',' -k1 >> "${tmpFile2}"
     mv "${tmpFile2}" "${finalFile}"
     chgrp tof "${finalFile}"
 
@@ -263,38 +279,43 @@ function doit() {
   # done with filelist
   rm "${FileList}" 
 
-  # combine files of different data types
-  # offset + rxClkBias
-  local xPPSandClkBias="${marker}.utc,unixtime,xPPSOffset,rxClkBias.${dates}.dat"
-  > "${xPPSandClkBias}"
-  logMsg "NOTICE: Combining all data for types xPPSOffset and RxClkBias..."
-  join --check-order -t ',' -e '' -j 1 -o "1.1,1.3,1.2,2.7" "${marker}.xPPSOffset.${dates}.dat" "${marker}.pvtGeo.${dates}.dat" >> "${xPPSandClkBias}"
-  rval=${?}; if [ ! ${rval} -eq 0 ]; then {
-    logMsg "WARNING: join failed: code=${rval}, unable to complete first join, skipping others."
-    exit 1
+  if [ "${dryrun}" = "yes" ]; then {
+    logMsg "NOTICE: dry run, skipping combining data"
+    continue
   } else {
-    logMsg "NOTICE: Combining all data for types xPPSOffset and RxClkBias...done"
-
-    local resultFile="${marker}.utc,unixtime,xPPSOffset,rxClkBias,rx_clk_ns.${dates}.dat"
-    > ${resultFile}
-    # prefix header line
-    #echo "#utc_iso8601,unixtime,xPPSOffset,rxClkBias,rx_clk_ns" > "${resultFile}"
-
-    # offset + rxClkBias + rx_clk_ns
-    logMsg "NOTICE: Combining all data for types xPPSOffset,RxClkBias and rx_clk_ns..."
-    join --check-order -t ',' -e '' -j 1 -o "1.1,1.2,1.3,1.4,2.2" "${xPPSandClkBias}" "${marker}.csrs-pp.${dates}.dat" >> "${resultFile}"
+    # combine files of different data types
+    # offset + rxClkBias
+    local xPPSandClkBias="${marker}.utc,unixtime,xPPSOffset,rxClkBias.${dates}.dat"
+    > "${xPPSandClkBias}"
+    logMsg "NOTICE: Combining all data for types xPPSOffset and RxClkBias..."
+    join --check-order -t ',' -e '' -j 1 -o "1.1,1.3,1.2,2.7" "${marker}.xPPSOffset.${dates}.dat" "${marker}.pvtGeo.${dates}.dat" >> "${xPPSandClkBias}"
     rval=${?}; if [ ! ${rval} -eq 0 ]; then {
-      logMsg "WARNING: join failed: code=${rval}, unable to complete final join"
-      exit 1
+      logMsg "WARNING: join failed: code=${rval}, unable to complete first join, skipping others."
+      continue
     } else {
-      logMsg "NOTICE: Combining all data for types xPPSOffset,RxClkBias and rx_clk_ns...done"
+      logMsg "NOTICE: Combining all data for types xPPSOffset and RxClkBias...done"
+
+      local resultFile="${marker}.utc,unixtime,xPPSOffset,rxClkBias,rx_clk_ns.${dates}.dat"
+      > ${resultFile}
+      # prefix header line
+      #echo "#utc_iso8601,unixtime,xPPSOffset,rxClkBias,rx_clk_ns" > "${resultFile}"
+
+      # offset + rxClkBias + rx_clk_ns
+      logMsg "NOTICE: Combining all data for types xPPSOffset,RxClkBias and rx_clk_ns..."
+      join --check-order -t ',' -e '' -j 1 -o "1.1,1.2,1.3,1.4,2.2" "${xPPSandClkBias}" "${marker}.csrs-pp.${dates}.dat" >> "${resultFile}"
+      rval=${?}; if [ ! ${rval} -eq 0 ]; then {
+        logMsg "WARNING: join failed: code=${rval}, unable to complete final join"
+        continue
+      } else {
+        logMsg "NOTICE: Combining all data for types xPPSOffset,RxClkBias and rx_clk_ns...done"
+      } fi
+
+      /usr/bin/sort ${resultFile} > ${resultFile}.tmp
+      mv ${resultFile}.tmp ${resultFile}
+
     } fi
 
-    sort ${resultFile} > ${resultFile}.tmp
-    mv ${resultFile}.tmp ${resultFile}
-
   } fi
-
   rm "${xPPSandClkBias}"
   for dataType in ${dataTypeList}; do {
     eval local finalFile="${finalFileTemplate}"
@@ -317,8 +338,9 @@ while [[ ! -z "${@}" ]]; do {
         lz*|--lz*)             zProg="lzop"; zExt=".lzo"; logMsg "DEBUG: lzo compression selected";;
         gz*|--gz*)             zProg="gzip"; zExt=".gz";  logMsg "DEBUG: gzip compression selected";;
         gz*|--gz*)             zProg="gzip"; zExt=".gz";  logMsg "DEBUG: gzip compression selected";;
-        dates|--dates)         dates="${1}"; logMsg "DEBUG: got date ranges";;
-        filter|--filter)       erex="${1}"; logMsg "DEBUG: got filter";;
+        dates|--dates)         dates="${1}"; logMsg "DEBUG: got date ranges: ${dates}"; shift;;
+        filter|--filter)       erex="${1}"; logMsg "DEBUG: got filter: ${erex}"; shift;;
+        uniq|--uniq)           checkUnique="yes"; logMsg "DEBUG: will check for uniqueness";;
         *)                     dates="${opt}"; logMsg "DEBUG: got dates"; [ ! -z "${1}" ] && erex="${1}" ; shift;;
     esac
     #logMsg "DEBUG: checking invocation parameters 1=${1}"
