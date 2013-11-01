@@ -175,7 +175,7 @@ function doit() {
 
   # find all files
   findFiles "${erex}" "${marker}" > "${FileList}"
-  local len=$(wc -l ${FileList})
+  local len=$(wc -l ${FileList}|cut -d' ' -f1)
   if [ ${len} -eq 0 ]; then {
     echo "WARNING: couldn't find any files for marker ${marker}, skipping marker"
     rm ${FileList}
@@ -267,7 +267,7 @@ function doit() {
     # sort all data of this type into new file with just one header
     logMsg "DEBUG: sorting file w/o headers"
     eval local finalFile="${finalFileTemplate}"
-    cat "${tmpFile}" | /usr/bin/egrep -v '^#|[a-df-zA-DF-SU-Z]'| /usr/bin/sort -t ',' -k1 >> "${tmpFile2}"
+    cat "${tmpFile}" | /usr/bin/egrep -v '^#|[a-df-zA-DF-SU-Z]'| /usr/bin/sort -t ',' -k1 | uniq >> "${tmpFile2}"
     mv "${tmpFile2}" "${finalFile}"
     chgrp tof "${finalFile}"
 
@@ -296,7 +296,7 @@ function doit() {
       logMsg "NOTICE: Combining all data for types xPPSOffset and RxClkBias...done"
 
       local resultFile="${marker}.utc,unixtime,xPPSOffset,rxClkBias,rx_clk_ns.${dates}.dat"
-      > ${resultFile}
+      [ -e ${resultFile} ] && >${resultFile}
       # prefix header line
       #echo "#utc_iso8601,unixtime,xPPSOffset,rxClkBias,rx_clk_ns" > "${resultFile}"
 
@@ -305,6 +305,7 @@ function doit() {
       join --check-order -t ',' -e '' -j 1 -o "1.1,1.2,1.3,1.4,2.2" "${xPPSandClkBias}" "${marker}.csrs-pp.${dates}.dat" >> "${resultFile}"
       rval=${?}; if [ ! ${rval} -eq 0 ]; then {
         logMsg "WARNING: join failed: code=${rval}, unable to complete final join"
+        [ -e ${resultFile} ] && rm ${resultFile}
         continue
       } else {
         logMsg "NOTICE: Combining all data for types xPPSOffset,RxClkBias and rx_clk_ns...done"
