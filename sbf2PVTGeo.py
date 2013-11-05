@@ -51,7 +51,7 @@ class t2kSeptPVTTime:
             #print("DEBUG: SBF block uses GNSS timeSystem")
             epochDiffNow = float( GNSSepochInUNIXepoch - leapSecSince1972 )
         elif timeSystem == 1:
-            # GLONASS timestamps on SBF blocks
+            # Galileo timestamps on SBF blocks
             #print("DEBUG: SBF block uses UTC timeSystem")
             raise Exception("ERROR: SBF block uses GLONASS time, not yet implimented.")
         elif timeSystem == 255 :

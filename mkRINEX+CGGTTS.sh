@@ -3,24 +3,34 @@
 
 #sbfTopDir="/home/t2k/public_html/post/gpsgroup/ptdata"
 sbfTopDir="/data-scratch"
+#resultsTopDir="./testTopDir"
+resultsTopDir="/home/t2k/public_html/post/gpsgroup/ptdata/organizedData"
 recvList="PT00 PT01 TOKA PT04"
+#recvNiceName[PT00]="NU1SeptentrioGPS-PT00"
+#recvNiceName[PT01]="RnHutSeptentrioGPS-PT01"
+#recvNiceName[TOKA]="NM-ND280SeptentrioGPS-TOKA"
+#recvNiceName[PT04]="TravelerGPS-PT04"
+recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
+PT01:RnHutSeptentrioGPS-PT01
+TOKA:NM-ND280SeptentrioGPS-TOKA
+PT04:TravelerGPS-PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
-rinexTopDir="/home/pdestefa/public_html/organizedData/rinex"
-rinexDir='${rinexTopDir}/${id}/${element}'
-cggTopDir="/home/pdestefa/public_html/organizedData/cggtts"
+rinexTopDir="${resultsTopDir}/rinex"
+rinexDir='${rinexTopDir}/${rxName}/${element}'
+cggTopDir="${resultsTopDir}/cggtts"
 cggParam="paramCGGTTS.dat"
 sbf2rinProg="/usr/local/RxTools/bin/sbf2rin"
 rin2cggProg="/usr/local/RxTools/bin/rin2cgg"
 rinFileName='${id}${day}'
 sbf2offsetProg="/home/pdestefa/local/src/samples/sbf2offset.py"
-offsetTopDir="/home/pdestefa/public_html/organizedData/xPPSOffsets/"
-offsetDir='${offsetTopDir}/${id}/${element}'
+offsetTopDir="${resultsTopDir}/xPPSOffsets"
+offsetDir='${offsetTopDir}/${rxName}/${element}'
 offsetFileName='xppsoffset.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
 sbf2pvtGeoProg="/home/pdestefa/local/src/samples/sbf2PVTGeo.py"
-pvtGeoTopDir="/home/pdestefa/public_html/organizedData/pvtGeodetic/"
-pvtGeoDir='${pvtGeoTopDir}/${id}/${element}'
+pvtGeoTopDir="${resultsTopDir}/pvtGeodetic"
+pvtGeoDir='${pvtGeoTopDir}/${rxName}/${element}'
 pvtGeoFileName='pvtGeo.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbfFileList="/tmp/sbfFileList"
+sbfFileList="/tmp/sbfFileList.$$"
 zProg="lzop"
 zExt="lzo"
 erex=".13_"
@@ -32,13 +42,31 @@ doOff="yes"
 doGEO="yes"
 dryrun="no"
 
+trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT (0)
+
 function logMsg() {
     echo "$@" 1>&2
+}
+
+function getRxName() {
+  local id=${1}
+  
+  local value=""
+  for pair in ${recvNiceNameList}; do {
+    if [[ ${pair} =~ ${id}.* ]]; then {
+      value=$( echo ${pair} | sed 's/.*://' )
+      if [ ! -z "${value}" ]; then break; fi
+    } fi
+  } done
+  if [ -z "${value}" ]; then logMsg "ERROR: couldn't find match for ${id}"; exit 1; fi
+  echo "${value}"
 }
 
 function getSBF() {
     local element=${1}
     local id=$2
+    #local rxName=${recvNiceName[${id}]}
+    local rxName=$( getRxName ${id} )
     local extraRegex=${3}
     logMsg "NOTICE: working on element ${element}"
 
@@ -66,7 +94,6 @@ function mkRin() {
     ${sbf2rinProg} -v -f "${sbf}" -o "${rin%O}G" -n G -R210 >/dev/null
     if [ ! ${?} -eq 0 ]; then {
         logMsg "ERROR: failed to process SBF data to RINEX."
-        exit 1
     } fi
     logMsg "NOTICE: done." 
 
@@ -76,6 +103,8 @@ function mkCGG() {
     local prev=${1}
     local curr=${2}
     local id=${3}
+    #local rxName=${recvNiceName[${id}]}
+    local rxName=$( getRxName "${id}" )
     local subDir=${4}
     local typ=${5}
     local day=${6}
@@ -94,6 +123,10 @@ function mkCGG() {
     # add day, must eliminate leady zeros to do math
     local dday=$( echo ${day} | sed -e 's/0*//' )
     local yesterday=$((${dday}-1))
+    if ! [[ ${prev} =~ ${yesterday} ]] ; then {
+      echo "WARNING: files ${prev} and ${curr} are not consecuitive days, skipping CGGTTS production"
+      return 0
+    } fi
     # calculate mjd for *yesterday*
     local mjd=$((${yrMJD} + ${yesterday} -1 ))
 
@@ -106,7 +139,7 @@ function mkCGG() {
 
     set +e
     logMsg "NOTICE: Generating CGGTTS file for day ${yesterday}, MJD $mjd..."
-    local cggParamFile="${cggTopDir}/${cggParam}.${id}" 
+    eval local cggParamFile="${cggTopDir}/${cggParam}.${id}" 
     if [ ! -e "${cggParamFile}" ] ; then {
         logMsg "ERROR: cannot create CGGTTS, cannot find parameters: ${cggParamFile}"
         rm rinex_*
@@ -118,7 +151,7 @@ function mkCGG() {
     eCode=$?
     logMsg "DEBUG: rin2ccg exit Code: ${eCode}"
     if [[ ${eCode} -eq 0 && -f CGGTTS.gps ]]; then
-        local cggFile="${cggTopDir}/${id}/${subDir}/CGGTTS.${id}.${typ}.yr${yr}.day${day}.mjd${mjd}"
+        eval local cggFile="${cggTopDir}/${id}/${subDir}/CGGTTS.${id}.${typ}.yr${yr}.day${day}.mjd${mjd}"
         local cggStoreDir=$(dirname ${cggFile})
         if [ ! -d ${cggStoreDir} ]; then mkdir --parents ${cggStoreDir}; fi
         logMsg "NOTICE: ...Done"
@@ -140,15 +173,16 @@ function mkCGG() {
     rm ${cggFile}.log
     logMsg "NOTICE: ...done."
 
-    rm rinex_*
-    rm CGGTTS.*
-    rm ${cggParam}
-
+    rmList=$(ls rinex_* CGGTTS.* ${cggParam} 2>/dev/null)
+    echo Removing files: ${rmList}
+    rm ${rmList}
 }
 
 function mkOffset() {
   local sbfFile="${1}"
   local id=${2}
+  #local rxName=${recvNiceName[${id}]}
+  local rxName=$( getRxName "${id}" )
   local element=${3}
   local typ=${4}
   local yr=${5}
@@ -171,6 +205,8 @@ function mkOffset() {
 function mkPVTGeo() {
   local sbfFile="${1}"
   local id=${2}
+  #local rxName=${recvNiceName[${id}]}
+  local rxName=$( getRxName "${id}" )
   local element=${3}
   local typ=${4}
   local yr=${5}
@@ -192,11 +228,13 @@ function mkPVTGeo() {
 
 function processSBF() {
     id=${1}
+    #local rxName=${recvNiceName["${id}"]}
+    local rxName=$( getRxName "${id}" )
     top=$PWD
     #cd ${id}
     set +e
 
-    logMsg "working on id=" ${id}
+    logMsg "working on id=${id},rxName=${rxName}"
 
     for element in ${pathGrps}; do {
         currSBF="currSBF"
@@ -223,7 +261,7 @@ function processSBF() {
             local part=${3}
             local yr=${4}
 
-            logMsg "DEBUG: basename=${basename},unzipped=${unzipped},currSBF=${currSBF},rinexFile=${rinexFile},element=${element},typ=${typ},day=${day},part=${part},yr=${yr}"
+            logMsg "DEBUG: basename=${basename},unzipped=${unzipped},currSBF=${currSBF},rinexFile=${rinexFile},element=${element},id=${id},rxName=${rxName},typ=${typ},day=${day},part=${part},yr=${yr}"
             if [[ "yes" = "${dryrun}" ]]; then logMsg "NOTICE: DRY-RUN, skipping processing."; continue; fi
 
             if [[ ! -e ${currSBF} ]]; then {
@@ -259,9 +297,14 @@ function processSBF() {
             # put RINEX file in organized location
             logMsg "NOTICE: compressing and storing RINEX data"
             for rinfile in ${rinexFile%O}*; do {
+                if [ ! -f "${rinfile}" ]; then {
+                  logMsg "WARNING: cannot find RINEX file ${rinfile}, mkRin failed??"
+                  continue
+                } fi
                 echo -n . 1>&2
                 rinZ=${rinfile}.gz
-                eval rinStoreDir="${rinexTopDir}/${id}/${element}"
+                #eval rinStoreDir="${rinexTopDir}/${id}/${element}"
+                eval rinStoreDir="${rinexDir}"
                 storeFile=${rinStoreDir}/${rinZ}
                 if [ ! -d ${rinStoreDir} ]; then mkdir --parents ${rinStoreDir}; fi
                 if [[ "yes" = "${clobber}" || ! -e ${storeFile} ]]; then {

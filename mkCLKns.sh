@@ -2,15 +2,14 @@
 
 
 csrsTopDir="/home/t2k/public_html/post/gpsgroup/ptdata/organizedData/csrs-pp"
-recvList="PT00 PT01 TOKA PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
 csrsFileList="/tmp/csrsFileList"
 #csrsFileName='csrs-pp.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-csrsFileName='csrs-pp.${id}.${typ}.yr${yr}.day${day}.dat'
+csrsFileName='csrs-pp.${id}.${typ}.yr${yr}.day${day}.pp${procDay}.dat'
 zProg="gzip"
 zExt=".gz"
 erex=".zip"
-clobber="yes"
+clobber="no"
 rebuild="no"
 dryrun="no"
 logLevel=3
@@ -46,6 +45,8 @@ function doit() {
     logMsg "NOTICE: working on csrs file: ${file}"
     local dir=$( dirname "${file}" )
     logMsg "DEBUG: dir=${dir}"
+    local basename=$( basename "${file}" )
+    local procDay=$(echo "${basename}"| cut -d'_' -f1 )
     local typ="int"
     [[ ${dir} =~ External ]] && typ="ext"
     local tgtFileGlob='*.pos'
@@ -59,12 +60,17 @@ function doit() {
       local yr=$(head --lines=2 "${tmp}" |tail --lines=1 | cut -c1-4)
       local id=$(echo "${tmp}" | cut -c1-4 | tr '[:lower:]' '[:upper:]' )
       local day=$(echo "${tmp}" | cut -c5-7)
-      #local part=$(echo "${posFile}" | cut -c8)
+      local part=$(echo "${posFile}" | cut -c8)
       eval local destFile="${dir}/${csrsFileName}"
-      logMsg "DEBUG: output file to ${destFile}${zExt}"
-      "${zProg}" -c "${tmp}" > "${tmp}${zExt}"
-      chgrp tof "${tmp}${zExt}"
-      mv "${tmp}${zExt}" "${destFile}${zExt}"
+      if [ ! -e ${destFile}${zExt} -o \( -e ${destFile}${zExt} -a "${clobber}" == "yes" \) ]; then {
+        logMsg "DEBUG: extrating data from zip bundle"
+        "${zProg}" -c "${tmp}" > "${tmp}${zExt}"
+        chgrp tof "${tmp}${zExt}"
+        logMsg "DEBUG: output file to ${destFile}${zExt}"
+        mv "${tmp}${zExt}" "${destFile}${zExt}"
+      } else {
+        logMsg "WARNING: clobber=no, not overwriting."
+      } fi
 
       rm "${tmp}"
       rm "${posFile}"
@@ -89,6 +95,7 @@ while [[ ! -z "${@}" ]]; do {
         dir*|--dir* )           csrsTopDir="${1}"; logMsg "DEBUG: csrsTopDir=${csrsTopDir}"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo"; logMsg "DEBUG: lzo compression selected";;
         gz*|--gz* )             zProg="gzip"; zExt=".gz";  logMsg "DEBUG: gzip compression selected";;
+        noclob*|--noclob* )     clobber='no'; logMsg "DEBUG: gzip compression selected";;
         *)                      erex=${opt}; logMsg "DEBUG: RegEx=${erex}"; shift;;
     esac
     #logMsg "DEBUG: checking invocation parameters 1=${1}"
