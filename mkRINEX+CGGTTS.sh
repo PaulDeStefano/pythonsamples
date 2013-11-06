@@ -30,6 +30,14 @@ sbf2pvtGeoProg="/home/pdestefa/local/src/samples/sbf2PVTGeo.py"
 pvtGeoTopDir="${resultsTopDir}/pvtGeodetic"
 pvtGeoDir='${pvtGeoTopDir}/${rxName}/${element}'
 pvtGeoFileName='pvtGeo.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+sbf2statProg="/home/pdestefa/local/src/samples/sbf2status.py"
+rxStatTopDir="${resultsTopDir}/rxStatus"
+rxStatDir='${rxStatTopDir}/${rxName}/${element}'
+rxStatFileName='rxStatus.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+sbf2dopProg="/home/pdestefa/local/src/samples/sbf2dop.py"
+dopTopDir="${resultsTopDir}/rxDOP"
+dopDir='${dopTopDir}/${rxName}/${element}'
+dopFileName='rxDOP.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
 sbfFileList="/tmp/sbfFileList.$$"
 zProg="lzop"
 zExt="lzo"
@@ -40,9 +48,11 @@ doRIN="yes"
 doCGG="yes"
 doOff="yes"
 doGEO="yes"
+doStat="yes"
+doDOP="yes"
 dryrun="no"
 
-trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT (0)
+trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT 0
 
 function logMsg() {
     echo "$@" 1>&2
@@ -226,6 +236,52 @@ function mkPVTGeo() {
   rm "${pvtGeoFile}"
 }
 
+function mkRxSatus() {
+  local sbfFile="${1}"
+  local id=${2}
+  local rxName=$( getRxName "${id}" )
+  local element=${3}
+  local typ=${4}
+  local yr=${5}
+  local day=${6}
+  local part=${7}
+
+  if [[ ! "yes" = ${doStat} ]]; then logMsg "NOTICE: skipping RxStatus production."; return 0; fi
+  logMsg "NOTICE: extracting RxStatus data"
+  eval local outfile="${rxStatFileName}"
+  outfile="$( echo ${outfile} | sed 's/\.part0//')"
+  eval local finalDir="${rxStatDir}"
+  /usr/local/bin/python2.7 "${sbf2statProg}" "${sbfFile}" >"${outfile}"
+  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
+  logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
+  ${zProg} -c "${outfile}" >${outfile}.${zExt}
+  mv  "${outfile}.${zExt}" "${finalDir}"/.
+  rm "${outfile}"
+}
+
+function mkDOP() {
+  local sbfFile="${1}"
+  local id=${2}
+  local rxName=$( getRxName "${id}" )
+  local element=${3}
+  local typ=${4}
+  local yr=${5}
+  local day=${6}
+  local part=${7}
+
+  if [[ ! "yes" = ${doDOP} ]]; then logMsg "NOTICE: skipping DOP production."; return 0; fi
+  logMsg "NOTICE: extracting DOP data"
+  eval local outfile="${dopFileName}"
+  outfile="$( echo ${outfile} | sed 's/\.part0//')"
+  eval local finalDir="${dopDir}"
+  /usr/local/bin/python2.7 "${sbf2dopProg}" "${sbfFile}" >"${outfile}"
+  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
+  logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
+  ${zProg} -c "${outfile}" >${outfile}.${zExt}
+  mv  "${outfile}.${zExt}" "${finalDir}"/.
+  rm "${outfile}"
+}
+
 function processSBF() {
     id=${1}
     #local rxName=${recvNiceName["${id}"]}
@@ -280,6 +336,12 @@ function processSBF() {
 
             # extract PVTGeodetic data
             mkPVTGeo "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+
+            # extract rxStatus data
+            mkRxSatus "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+
+            # extract DOP data
+            mkDOP "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
 
             # make RINEX
             currRINEX="${rinexFile}"
@@ -349,7 +411,10 @@ while [[ ${#} -gt 0 ]]; do {
         norin*|NORIN*|--norin* )      doRIN="no"; doCGG="no"; shift;;
         nocgg*|NOCGG*|--nocgg* )      doCGG="no"; shift;;
         nooff*|NOOFF*|--nooff* )      doOff="no"; shift;;
+        noxpps*|NOXPPS*|--noxpps* )   doOff="no"; shift;;
         noGEO*|NOGEO*|--nogeo* )      doGEO="no"; shift;;
+        nostat*|NOSTAT*|--nostat* )   doStat="no"; shift;;
+        noDOP*|NODOP*|--nodop* )      doDOP="no"; shift;;
         dry*|--dry* )           dryrun="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
         gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;

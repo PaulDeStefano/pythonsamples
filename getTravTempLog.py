@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python2.7
 
 import time, serial, struct, sys, os, string, subprocess, datetime
 
