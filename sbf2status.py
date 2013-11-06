@@ -1,7 +1,7 @@
 #!/usr/local/bin/python2.7
 """ sbf2offset.py
     Reads SBF binary data files and produces plain text file
-    containing PVTGeoblock data
+    containing ReceiverStatus data
 
     Copyright (C) 2013 Paul R. DeStefano
 
@@ -94,40 +94,35 @@ def doStuff(f) :
     #print('do stuff on file '+f+'...\n')
     with open(f,'r') as sbf_fobj:
       #for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'},limit=10):
-      for blockName, block in pysbf.load(sbf_fobj, blocknames={'PVTGeodetic_v2'}):
-        errCode=block['Error']
-        phi=block['Phi']
-        lmbd=block['Lambda']
-        h=block['h']
-        rxClkBias=block['RxClkBias']
-        rxClkDrift=block['RxClkDrift']
-        nrSV=block['NrSV']
-        mode=block['Mode']
-        signalInfo=block['SignalInfo']
-        alertFlag=block['AlertFlag']
+      for blockName, block in pysbf.load(sbf_fobj, blocknames={'ReceiverStatus_v2'}):
         WNc=block['WNc']
         TOW=block['TOW']
-        timeSystem=block['TimeSystem']
+        CPULoad=block['CPULoad']
+        extError=block['ExtError']
+        upTime=block['UpTime']
+        rxState=block['RxState']
+        rxError=block['RxError']
+
+        timeSystem=0 # assume this is GNSS time
         try:
-            if (errCode > 0):
-                raise t2kSBFDataError('WARNING: Unknown block error code: {}'.format(errCode))
             rcvrTime = t2kSeptPVTTime(WNc,TOW,timeSystem)
         except t2kSBFDataError as e:
             stderr.write(str(e)+', skipping block (WNc={},TOW={},NrSV={},SignalInfo={},AlertFlag={})'.format(errCode,WNc,TOW,nrSV,signalInfo,alertFlag )+'\n')
             continue
         iso8601, unixtime, WNc, TOW, jd, mjd, dayOfYear = rcvrTime.getTuple()
-        print("{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}".format(
+        print("{},{},{},{},{},{},{},{},{},{},{},{}".format(
                 iso8601, unixtime,
-                errCode,
-                phi, lmbd, h,
-                rxClkBias, rxClkDrift,
-                nrSV,
                 WNc, TOW, jd, mjd, dayOfYear,
-                mode, signalInfo, alertFlag ) )
+                CPULoad,
+                extError,
+                upTime,
+                rxState,rxError
+                ) )
 
 if __name__ == "__main__" :
     #print('hi\n')
     #print(sys.argv)
+    headerText='ISO_Date,UNIX_time,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,CPULoad,ExtError,UpTime,RxState,RxError'
     parser = argparse.ArgumentParser(
             formatter_class=argparse.RawDescriptionHelpFormatter
             ,description='Prints all xPPSOffset values it finds in given files.'
@@ -158,7 +153,7 @@ TOW = number of miliseconds since start of the current week
     #print('working on files:'+str(fileList)+'\n')
 
     if (header):
-        print 'ISO_Date,UNIX_time,SBFblkErrCode,phi,lambda,height,rxClkBias,rxClkDrift,nrSV,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,Mode,SignalInfo,AlertFlag'
+        print headerText
     for f in fileList :
         #print('working on file: '+f)
         doStuff(f)

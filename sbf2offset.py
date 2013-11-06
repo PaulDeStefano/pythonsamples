@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/local/bin/python2.7
 """ sbf2offset.py
     Reads SBF binary data files and produces plain text file
     containing xPPSOffset data values
@@ -64,7 +64,7 @@ class t2kSeptTime:
         elif timeScale == 2:
             # UTC timestamps on SBF blocks
             #print("DEBUG: SBF block uses UTC timescale")
-            raise Exception("ERROR: SBF block uses UTC.  implimentation not yet verifyed.")
+            #raise Exception("ERROR: SBF block uses UTC.  implimentation not yet verifyed.")
             #TODO : I had better check this.
             epochDiffNow = float( GNSSepochInUNIXepoch )
         else:
