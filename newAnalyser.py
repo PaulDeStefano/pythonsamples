@@ -40,34 +40,37 @@ mpl.rcParams['figure.subplot.left'] = 0.07
 mpl.rcParams['figure.subplot.bottom'] = 0.08
 mpl.rcParams['figure.subplot.right'] = 0.96
 mpl.rcParams['figure.subplot.top']  = 0.96 
+mpl.rcParams['font.size']           = 9
+
 # small figures
-mpl.rcParams['figure.figsize']      = (10,8.0)
+mpl.rcParams['figure.figsize']      = (7.0,5.0)
 mpl.rcParams['figure.subplot.left'] = 0.08
-mpl.rcParams['figure.subplot.bottom'] = 0.14
+mpl.rcParams['figure.subplot.bottom'] = 0.25
 mpl.rcParams['figure.subplot.right'] = 0.95
 mpl.rcParams['figure.subplot.top']  = 0.94 
+mpl.rcParams['font.size']           = 12
 
 mpl.rcParams['grid.alpha']          = 0.4
 mpl.rcParams['axes.grid']           = True
-mpl.rcParams['axes.facecolor']      = '0.90'
+#mpl.rcParams['axes.facecolor']      = '0.90'
+mpl.rcParams['axes.facecolor']      = '1'
 mpl.rcParams['lines.linestyle']     = None
 mpl.rcParams['lines.marker']        = '+'
 mpl.rcParams['lines.markersize']    = 3
 mpl.rcParams['lines.antialiased']   = True
-mpl.rc('font'
-        ,size=9 )
+
 mpl.rc('legend'
         ,markerscale=2.0
-        ,fontsize='medium')
+        ,fontsize='small')
 mpl.rc('text'
         ,usetex=False )
 mpl.rcParams['xtick.major.size']    = 10.0
 mpl.rcParams['xtick.major.width']   = 2.0
-mpl.rcParams['xtick.labelsize']     = 'large'
+mpl.rcParams['xtick.labelsize']     = 'medium'
 mpl.rcParams['xtick.direction']     = 'inout'
 mpl.rcParams['ytick.major.size']    = 10.0
 mpl.rcParams['ytick.major.width']   = 2.0
-mpl.rcParams['ytick.labelsize']     = 'large'
+mpl.rcParams['ytick.labelsize']     = 'medium'
 mpl.rcParams['ytick.direction']     = 'inout'
 
 # disable sparse x ticks, doesn't work
@@ -112,6 +115,25 @@ def logRange(minPower,maxPower,base=10):
         power += 1
     return r
 
+def avar2sample(phase1, phase2):
+    freq = phase2 - phase1
+    return (1.0/2.0)*np.mean(np.square(freq))
+
+'''
+def modAVAR(phases,n,tau0) :
+    phaseArray = np.array(phases)
+    N = len(phaseArray)
+    const = (1.0 / (2*n**4 * tau0**2 * (N-3*n+1) ) )
+    jStart = 0
+    jEnd = N - 3*n 
+    phaseSamples = phaseArray[jStart:jEnd:n]
+
+    for j in xrange(jStart,jEnd,n) :
+        iStart = j
+        iEnd = j+n-1
+        for i in xrange(
+'''
+
 def allan(phases, tau, base=1):
     """
     allan(t, y, tau, base)
@@ -129,9 +151,12 @@ def allan(phases, tau, base=1):
     s : Squared Allan variance
     """
     phaseArray = np.array(phases)
+    #logMsg("DEBUG: allan: got phases",phaseArray[0:10])
     freq = phaseArray[1:] - phaseArray[0:-1]
+    #logMsg("DEBUG: allan: got freq",freq[0:5])
     # Divide time up to 'tau' length units for averaging
-    times = np.arange(0,phaseArray.size-1, tau)
+    times = np.arange(0,freq.size-1, tau)
+    #logMsg("DEBUG: allan: got times",times[0])
     # Create temporary variable for fractional frequencies
     vari = np.zeros(len(times))
     for tstep in range(0, len(times)):
@@ -141,7 +166,12 @@ def allan(phases, tau, base=1):
         vari[tstep] = (sp.mean(data) - base) / base
     # Squared Allan variance
     s = sp.mean((vari[0:-1] - vari[1:]) ** 2) / 2
+    #logMsg("DEBUG: allan: got avar",s)
     return s 
+
+def rms(seq):
+    array = np.array(seq)
+    return np.sqrt(np.mean(np.square(array)))
 
 class tofAnalayser:
     """Draft Implimentation of TOF Data Analyser Module"""
@@ -156,12 +186,12 @@ class tofAnalayser:
             , 'getCorrData.full': 'iso8601,unixtime,xPPSOffset,rxClkBias,rx_clk_ns' 
             , 'xPPSOffset'      : 'iso8601,xPPSOffset,ignore,ignore,ignore,ignore,ignore,ignore' 
             , 'xPPSOffset.full' : 'iso8601,xPPSOffset,unixtime,ignore,ignore,ignore,ignore,ignore' 
-            , 'master'          : 'iso8601,dT,xPPSOffset,rxClkBias,rx_clk_ns,dT_ns,rxClkBias_ns,PPCorr,dTPPCorr,dTCorr_avg,dTPPCorr_avg' 
-            , 'csvSave'         : 'unixtime,dT,xPPSOffset,rxClkBias,rx_clk_ns,dT_ns,rxClkBias_ns,PPCorr,dTPPCorr,dTCorr_avg,dTPPCorr_avg' 
-            , 'csvOleg'         : 'unixtime dT_ns xPPSOffset rx_clk_ns rxClkBias_ns PPCorr dTPPCorr' 
+            , 'master'          : 'iso8601,dT,xPPSOffset,rxClkBias,rx_clk_ns,dT_ns,rxClkBias_ns,PPCorr,dTPPCorr,dTCorr_avg,dTCorr_avgerr,dTPPCorr_avg,dTPPCorr_avgerr' 
+            , 'csvSave'         : 'unixtime,dT,xPPSOffset,rxClkBias,rx_clk_ns,dT_ns,rxClkBias_ns,PPCorr,dTPPCorr,dTCorr_avg,dTCorr_avgerr,dTPPCorr_avg,dTPPCorr_avgerr' 
             }
     formatDict['default'] = formatDict['ticFinal']  # alias names for formats
     formatDict['hdf'] = formatDict['master']        # not used
+    formatDict['csvOleg'] = re.sub(' ',',',formatDict['csvSave'])
     optionsDict = {}
     masterDF = pandas.DataFrame({
         'iso8601'       : []
@@ -179,16 +209,16 @@ class tofAnalayser:
     colorMap =  {
                 'dT' : 'red'
                 ,'dT_ns' : 'darkred'
-                ,'dTCorr' : 'lightgreen'
+                ,'dTCorr' : 'green'
                 ,'xPPSOffset': 'grey'
                 ,'rxClkBias': 'lightblue'
                 ,'rxClkBias_ns': 'blue'
                 ,'rx_clk_ns': 'magenta'
                 ,'PPCorr' : 'yellow'
-                ,'dTPPCorr' : 'cyan'
+                ,'dTPPCorr' : 'darkcyan'
                 ,'dT-StnClkOff' : 'orange'
-                ,'dTCorr_avg' : 'lightgreen'
-                ,'dTPPCorr_avg' : 'cyan'
+                ,'dTCorr_avg' : 'green'
+                ,'dTPPCorr_avg' : 'darkcyan'
                 }
     markerMap =  {
                 'dT' : 'x'
@@ -246,7 +276,8 @@ class tofAnalayser:
 
     def configMPLfig(self, fig):
         self.configMPLaxes(axes=fig.gca())
-        fig.subplots_adjust(bottom=0.08)
+        #fig.subplots_adjust(bottom=0.08) #lg
+        fig.subplots_adjust(bottom=0.16) #sm
 
     def locations(self):
         return self.dbDict.keys()
@@ -266,10 +297,10 @@ class tofAnalayser:
         parser.add_argument('--offsets', nargs='?', help='File continating xPPSoffset values (from sbf2offset.py)')
         parser.add_argument('--addOffset', dest='negOffset', action='store_false', default=True, help='Boolean.  Add offset values to TIC measurements (dT)')
         parser.add_argument('--subtractOffset', dest='negOffset', action='store_true', default=True, help='Boolean. Subtract offset values from TIC measurements (dT)')
-        parser.add_argument('--histogram', nargs='?', default=False, help='Make histograms')
+        parser.add_argument('--histogram', action='store_true', default=False, help='Make histograms')
         parser.add_argument('--histbins', nargs='?', default=50, help='Number of bins in histograms')
         parser.add_argument('--shiftOffset', '-s', nargs='?', default=0, help='shift time of xPPSOffset corrections wrt. TIC measurements by this many seconds')
-        parser.add_argument('--importLimit', '-L', nargs='?', default=100000000, help='limit imported data to the first <limit> lines')
+        parser.add_argument('--importLimit', '-L', nargs='?', default=1E7, help='limit imported data to the first <limit> lines')
         parser.add_argument('--outputPrefix', nargs='?', default=False, help='Save the results of the applied xPPSOffset corrections to a series of files with this name prefix')
         parser.add_argument('--frequency', '-F', action='store_true',default=False, help='Calculate Frequency Departure of all time series analysed')
         parser.add_argument('--fft', '-S', action='store_true',default=False, help='Calculate Spectral Density (Fourier Transform) of any time series')
@@ -350,6 +381,8 @@ class tofAnalayser:
         resampleList = filter( lambda x: re.search('_avg', x) ,masterFromatList.split(',') )
         logMsg("DEBUG: configure: resampleList:", resampleList )
         optionsDict['resampleDataBeforePlotList'] = filter( lambda x: re.search('_avg', x) , resampleList )
+        '''cacluate errors for these types of data'''
+        optionsDict['calcErrList'] = ['dTCorr_avg','dTPPCorr_avg']
 
         logMsg('DEBUG: harvested coniguration:',optionsDict)
 
@@ -445,12 +478,15 @@ class tofAnalayser:
         else:
             logMsg("WARNING: no new inputFiles to load")
         
+        # store data
+        self.save()
+
         ''' check for duplicates indecies'''
         logMsg("DEBUG: checking for duplcates")
         for db in self.dbDict.values() :
             dupList = db.index.get_duplicates()
             if list(dupList) != list():
-                logMsg("DEBUG: loaded data contains duplicate index:",dupList)
+                logMsg("DEBUG: loaded data contains duplicate index:",dupList,"len:",len(dupList) )
                 raise Exception("ERROR: loaded data contains duplicate index")
 
         ''' Drop data we don't need '''
@@ -462,7 +498,7 @@ class tofAnalayser:
             logMsg("DEBUG: storeOnly specified, exiting now.")
             exit(0)
 
-        #self.preview(previewPoint="After Loading", debug=False)
+        self.preview(previewPoint="After Loading", debug=True)
 
 
     def _getFormat(self,fmt):
@@ -679,6 +715,8 @@ class tofAnalayser:
         timeList = [ timegm(x.utctimetuple()) for x in index ]
         newColumn = pandas.DataFrame( timeList, index=index )
         dataFrame['unixtime'] = newColumn
+        logMsg("DEBUG:addUNIXTime: head",dataFrame.head() )
+        logMsg("DEBUG:addUNIXTime: tail",dataFrame.tail() )
         return dataFrame
     
     def __createUNIXtime(self):
@@ -705,13 +743,17 @@ class tofAnalayser:
             #self.__createUNIXtime()
             for loc in self.locations():
                 db = self.dbDict[loc]
-                newdb = np.round(db,3)
+                cols = set(names).intersection(db.keys())
+                if cols == set():
+                    continue
+                #newdb = np.round(db,3)
+                newdb = db
                 self.__addUNIXTimeColumn(db)
                 fileName =  fileNamePrefix+'.'+loc+'.csv'+suffix
                 logMsg("DEBUG: saveToFile: saving to CSV store in file",fileName)
                 newdb.to_csv(fileName
                         ,header=True
-                        ,cols=names
+                        ,cols=cols
                         ,sep=separator
                         ,index=True
                         ,index_label='utc'
@@ -765,12 +807,26 @@ class tofAnalayser:
                 seq = dfView[name].resample(self.optionsDict['resamplePlot'] )
             else:
                 seq = dfView[name]
+            
+            '''plot with erro bars, if data exists'''
             color = self.optionsDict['tofPlotPref']['color'+':'+loc][name]
             marker = self.optionsDict['tofPlotPref']['marker'+':'+loc][name]
+            '''limit ledend to only nu1 items just to reduce legend size'''
             label = '_nolegend_'
             if loc == 'nu1':
                 label = name
             seq.plot(ax=axes,color=color,marker=marker,label=label,fillstyle='full')
+            errVals = None
+            if name+'err' in self.dbDict[loc].keys() :
+                logMsg("DEBUG: plotAllInOne: has errorbars:",name)
+                axes = fig.gca()
+                df = self.dbDict[loc]
+                errVals = df[name+'err'].ix[ seq.index ]
+                print errVals.tail()
+                plt.errorbar(axes=axes,x=seq.index.values,y=seq.values,yerr=errVals,label=None)
+            else:
+                logMsg("DEBUG: plotAllInOne: no errorbards for:",name)
+
         #title = self.optionsDict['description']
         #fig.suptitle(title)
         #axes.set_ylabel('dT (ns)')
@@ -836,21 +892,25 @@ class tofAnalayser:
         self.configMPLfig(fig)
 
         # auto zoom to important bits
-        if zoomData in nameList and zoomData in self.dbDict['nu1'].keys():
-            dTmax=self.dbDict['nu1'][zoomData].max()
-            dTmin=self.dbDict['nu1'][zoomData].min()
-            axes.set_ylim(bottom=dTmin-5,top=dTmax+5)
+        if zoomData in dataNameList :
+            if list() != self.dbDict['nu1'].keys():
+                if zoomData in self.dbDict['nu1'].keys():
+                    dTmax=self.dbDict['nu1'][zoomData].max()
+                    dTmin=self.dbDict['nu1'][zoomData].min()
+                    axes.set_ylim(bottom=dTmin-5,top=dTmax+5)
         
         #plt.draw() # redraw
         if show == True:
+            logMsg('DEBUG: plotType2new: showing...')
             plt.show()
-        logMsg('DEBUG: plotType2new...')
+        logMsg('DEBUG: plotType2new...done')
 
     def plotType1(self, dataFrame):
         logMsg('DEBUG: plotType1...')
         plt.figure()
         for key in dataFrame.keys():
             dataFrame[key].plot(grid=True,style=tofAnalayser.styleMap[key])
+        logMsg('DEBUG: plotType1: showing...')
         plt.show()
         logMsg('DEBUG: plotType2: done...')
 
@@ -881,6 +941,7 @@ class tofAnalayser:
             #TODO:make histogram and kde on same plot
             dfView.plot(kind='kde',subplots=True,style='k-',title=loc+' (downsampled)')
 
+        logMsg("DEBUG: doHist: showing...")
         plt.show()
         logMsg("DEBUG: doHist:...done")
 
@@ -891,19 +952,30 @@ class tofAnalayser:
         fig = plt.figure()
         nameList = ['dT_ns']
         self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+        ylim = fig.gca().get_ylim()  # save limits for other plots
+
+        #fig = plt.figure()
+        #nameList = ['dT_ns','dTCorr']
+        #self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+        fig.gca().set_ylim(ylim)
+        fig = plt.figure()
+        nameList = ['dTCorr']
+        self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+        fig.gca().set_ylim(ylim)
+
+        #fig = plt.figure()
+        #nameList = ['dTCorr','dTPPCorr']
+        #self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+        fig = plt.figure()
+        nameList = ['dTPPCorr']
+        self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
+        fig.gca().set_ylim(ylim)
 
         fig = plt.figure()
-        nameList = ['dT_ns','dTCorr']
+        nameList = ['rxClkBias_ns','rx_clk_ns']
         self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
 
-        fig = plt.figure()
-        nameList = ['dTCorr','dTPPCorr']
-        self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
-
-        fig = plt.figure()
-        nameList = ['rxClkBias','rx_clk_ns']
-        self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
-
+        logMsg('DEBUG: viewProgressive: showing...')
         plt.show()
         logMsg('DEBUG: viewProgressive...done')
 
@@ -922,6 +994,7 @@ class tofAnalayser:
         nameList = ['dT_ns','dTCorr','dTPPCorr','dTCorr_avg','dTPPCorr_avg']
         self.plotType2new(self.dbDict,nameList=nameList,fig=fig)
 
+        logMsg('DEBUG: viewSimple: showing...')
         plt.show()
         logMsg('DEBUG: viewSimple...done')
 
@@ -930,6 +1003,8 @@ class tofAnalayser:
         logMsg("DEBUG: droping NAN values...")
         for loc in self.dbDict.keys():
             dat = self.dbDict[loc]
+            if 'dT' not in dat.keys() :
+                continue
             self.dbDict[loc] = dat[ - pandas.isnull(dat['dT']) ]  # safe, only missing dT
             #self.dbDict[loc] = dat.dropna(how='any')  # all rows missing data in *any* column
             logMsg("DEBUG: after dropna:",dat)
@@ -993,7 +1068,9 @@ class tofAnalayser:
         avgSamples = logRange(1,7)
         measUnit = 10**-9 #seconds
         #seq = self.dbDict['nu1']['dT_ns'].dropna() * measUnit
-        seq = self.dbDict['nu1']['dTPPCorr'].dropna()
+        name = 'dTPPCorr'
+        loc = 'nu1'
+        seq = self.dbDict[loc][name].dropna()
         seqLength = len(seq)
         adevList = list()
         avgCompleteList = list()
@@ -1009,7 +1086,8 @@ class tofAnalayser:
 
         plt.figure()
         plt.loglog(avgCompleteList, adevList , linestyle='-', marker='o', color='b')
-        plt.suptitle('ADEV')
+        plt.suptitle('ADEV @'+loc+':'+name)
+        logMsg('DEBUG: viewFrequency: showing...')
         plt.show()
 
         #avarSeq = pandas.expanding_apply( seq,self.avar,min_periods=10 ) # too slow!
@@ -1039,15 +1117,30 @@ class tofAnalayser:
             avgDataList = ['dTCorr','dTPPCorr']
             for name in avgDataList:
                 if db.empty:
-                    logMsg("DEBUG: empty data for location:",loc,"skipping")
+                    logMsg("DEBUG: doAvg: empty data for location:",loc,"skipping")
                     continue
                 if name not in db.keys() :
                     #raise Exception("Data needed for PP corrections not found")
-                    logMsg("DEBUG: insufficient data for Averaging, loc:",loc,", skipping")
+                    logMsg("DEBUG: doAvg: insufficient data for Averaging, loc:",loc,", skipping")
                     continue
-                avgname=name+'_avg'
-                db[avgname] = pandas.rolling_mean( db[name], window )
+                newname=name+'_avg'
+                logMsg("DEBUG: doAvg: calculating avg for ",name)
+                db[newname] = pandas.rolling_mean( db[name], window )
+                #print db[newname].tail()
                 #TODO: db[avgname] = pandas.rolling_window( db[name], window, 'boxcar', center=True)
+                '''do statistical error, too'''
+                if newname in self.optionsDict['calcErrList'] :
+                    errName=newname+'err'
+                    '''
+                    db[errName] = pandas.rolling_apply( 
+                            db[name]
+                            ,window,func=lambda x: np.sqrt( avar2sample( x[0]*1E-9,x[-1]*1E-9) )*window*1E9 )
+                    '''
+                    db[errName] = pandas.rolling_apply( 
+                            db[name]
+                            ,window,func=np.std )
+                    #print db[errName].tail()
+                    logMsg("DEBUG: doAvg: done calculating errors for ",newname)
 
         logMsg("DEBUG: doAvg: ...done")
 
