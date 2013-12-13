@@ -38,6 +38,10 @@ sbf2dopProg="/home/pdestefa/local/src/samples/sbf2dop.py"
 dopTopDir="${resultsTopDir}/rxDOP"
 dopDir='${dopTopDir}/${rxName}/${element}'
 dopFileName='rxDOP.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+sbf2GLOtime="/home/pdestefa/local/src/samples/sbf2GLOtime.py"
+GLOtimeTopDir="${resultsTopDir}/GLOtime"
+GLOtimeDir='${GLOtimeTopDir}/${rxName}/${element}'
+GLOtimeFileName='GLOtime.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
 sbfFileList="/tmp/sbfFileList.$$"
 zProg="lzop"
 zExt="lzo"
@@ -50,6 +54,7 @@ doOff="yes"
 doGEO="yes"
 doStat="yes"
 doDOP="yes"
+doGLOtime="yes"
 dryrun="no"
 
 trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT 0
@@ -85,6 +90,7 @@ function getSBF() {
         -type f -iwholename "*${element}*${id}*.??_*" \
         2>/dev/null \
         | egrep -i "${extraRegex}" \
+        | fgrep -v /old/ \
         | sort \
     )
 
@@ -99,11 +105,11 @@ function mkRin() {
     if [ -z "${rin}" ]; then logMsg ERROR: need output name for RINEX data; exit 1; fi
     logMsg "NOTICE: processing SBF data into RINEX files..."
 
-    ${sbf2rinProg} -v -f "${sbf}" -o "${rin}" -R210 >/dev/null
-    ${sbf2rinProg} -v -f "${sbf}" -o "${rin%O}N" -n N -R210 >/dev/null
-    ${sbf2rinProg} -v -f "${sbf}" -o "${rin%O}G" -n G -R210 >/dev/null
+    ${sbf2rinProg} -v -f "${sbf}" -o "${rin}" -R210 >/dev/null 2>/${rin}.log
+    ${sbf2rinProg} -v -f "${sbf}" -o "${rin%O}N" -n N -R210 >/dev/null 2>/${rin}.log
+    ${sbf2rinProg} -v -f "${sbf}" -o "${rin%O}G" -n G -R210 >/dev/null 2>/${rin}.log
     if [ ! ${?} -eq 0 ]; then {
-        logMsg "ERROR: failed to process SBF data to RINEX."
+        logMsg "WARNING: failed to process SBF data to RINEX."
     } fi
     logMsg "NOTICE: done." 
 
@@ -169,11 +175,10 @@ function mkCGG() {
         [[ -f CGGTTS.out ]] && mv CGGTTS.out "${cggFile}.out"
         [[ -f CGGTTS.log ]] && mv CGGTTS.log "${cggFile}.log"
     else
-        logMsg "ERROR: failed to process RINEX data to CGGTTS"
+        logMsg "WARNING: failed to process RINEX data to CGGTTS for day ${day}"
         cat CGGTTS.log 1>&2
         rm rinex_*
         rm ${cggParam}
-        exit 1
     fi
 
     logMsg "NOTICE: compressing CGGTTS data..."
@@ -203,13 +208,18 @@ function mkOffset() {
   logMsg "NOTICE: extracting xPPSOffset data"
   eval local offsetfile="${offsetFileName}"
   offsetfile="$( echo ${offsetfile} | sed 's/\.part0//')"
-  /usr/local/bin/python2.7 "${sbf2offsetProg}" "${sbfFile}" >"${offsetfile}"
+  local errfile="${offsetfile%%dat}log"
+  logMsg "DEBUG: outfile=${offsetfile} errfile=${errfile}"
+  /usr/local/bin/python2.7 "${sbf2offsetProg}" "${sbfFile}" >"${offsetfile}" 2>"${errfile}"
   eval local offsetFinalDir="${offsetDir}"
   if [[ ! -d ${offsetFinalDir} ]]; then mkdir --parents ${offsetFinalDir}; fi
   logMsg "DEBUG: moving offset data to ${offsetFinalDir}/${offsetfile}.${zExt}"
   ${zProg} -c "${offsetfile}" >${offsetfile}.${zExt}
   mv  "${offsetfile}.${zExt}" "${offsetFinalDir}"/.
   rm "${offsetfile}"
+  ${zProg} -c "${errfile}" >${errfile}.${zExt}
+  mv  "${errfile}.${zExt}" "${offsetFinalDir}"/.
+  rm "${errfile}"
 }
 
 function mkPVTGeo() {
@@ -228,12 +238,17 @@ function mkPVTGeo() {
   eval local pvtGeoFile="${pvtGeoFileName}"
   pvtGeoFile="$( echo ${pvtGeoFile} | sed 's/\.part0//')"
   eval local pvtGeoFinalDir="${pvtGeoDir}"
-  /usr/local/bin/python2.7 "${sbf2pvtGeoProg}" "${sbfFile}" >"${pvtGeoFile}"
+  local errfile="${pvtGeoFile%%dat}log"
+  logMsg "DEBUG: outfile=${pvtGeoFile} errfile=${errfile}"
+  /usr/local/bin/python2.7 "${sbf2pvtGeoProg}" "${sbfFile}" >"${pvtGeoFile}" 2>"${errfile}"
   if [[ ! -d ${pvtGeoFinalDir} ]]; then mkdir --parents ${pvtGeoFinalDir}; fi
   logMsg "DEBUG: moving PVTGeodetic data to ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt}"
   ${zProg} -c "${pvtGeoFile}" >${pvtGeoFile}.${zExt}
   mv  "${pvtGeoFile}.${zExt}" "${pvtGeoFinalDir}"/.
   rm "${pvtGeoFile}"
+  ${zProg} -c "${errfile}" >${errfile}.${zExt}
+  mv  "${errfile}.${zExt}" "${pvtGeoFinalDir}"/.
+  rm "${errfile}"
 }
 
 function mkRxSatus() {
@@ -251,12 +266,17 @@ function mkRxSatus() {
   eval local outfile="${rxStatFileName}"
   outfile="$( echo ${outfile} | sed 's/\.part0//')"
   eval local finalDir="${rxStatDir}"
-  /usr/local/bin/python2.7 "${sbf2statProg}" "${sbfFile}" >"${outfile}"
+  local errfile="${outfile%%dat}log"
+  logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
+  /usr/local/bin/python2.7 "${sbf2statProg}" "${sbfFile}" >"${outfile}" 2>"${outfile%%dat}log"
   if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
   logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
   ${zProg} -c "${outfile}" >${outfile}.${zExt}
   mv  "${outfile}.${zExt}" "${finalDir}"/.
   rm "${outfile}"
+  ${zProg} -c "${errfile}" >${errfile}.${zExt}
+  mv  "${errfile}.${zExt}" "${finalDir}"/.
+  rm "${errfile}"
 }
 
 function mkDOP() {
@@ -274,12 +294,57 @@ function mkDOP() {
   eval local outfile="${dopFileName}"
   outfile="$( echo ${outfile} | sed 's/\.part0//')"
   eval local finalDir="${dopDir}"
-  /usr/local/bin/python2.7 "${sbf2dopProg}" "${sbfFile}" >"${outfile}"
+  local errfile="${outfile%%dat}log"
+  logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
+  /usr/local/bin/python2.7 "${sbf2dopProg}" "${sbfFile}" >"${outfile}" 2>"${outfile%%dat}log"
   if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
   logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
   ${zProg} -c "${outfile}" >${outfile}.${zExt}
   mv  "${outfile}.${zExt}" "${finalDir}"/.
   rm "${outfile}"
+  ${zProg} -c "${errfile}" >${errfile}.${zExt}
+  mv  "${errfile}.${zExt}" "${finalDir}"/.
+  rm "${errfile}"
+}
+
+function sbfExtract() {
+  local sbfFile="${1}"
+  local id=${2}
+  local rxName=$( getRxName "${id}" )
+  local element=${3}
+  local typ=${4}
+  local yr=${5}
+  local day=${6}
+  local part=${7}
+  local blkType=${8}
+
+  local doType="do${blkType}"
+  local progType="sbf2${blkType}"
+  local extractProg="${!progType}"
+  #logMsg "DEBUG: extractProg=${extractProg}"
+  #logMsg "DEBUG: doType=${doType} !doType=${!doType}"
+
+  if [[ ! yes = ${!doType} ]]; then logMsg "NOTICE: skipping ${blkType} extraction."; return 0; fi
+  logMsg "NOTICE: extracting ${blkType} data with program ${extractProg}"
+  local typeFile="${blkType}FileName"
+  eval local outfile="${!typeFile}"
+  outfile="$( echo ${outfile} | sed 's/\.part0//')"
+  local errfile="${outfile%%dat}log"
+  logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
+  local dirType="${blkType}Dir"
+  eval local finalDir="${!dirType}"
+  logMsg "DEBUG: finalDir=${finalDir}"
+  #exit 10 # DEBUG
+  /usr/local/bin/python2.7 "${extractProg}" "${sbfFile}" >"${outfile}" 2>"${errfile}"
+  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
+  logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
+  ${zProg} -c "${outfile}" >${outfile}.${zExt}
+  mv  "${outfile}.${zExt}" "${finalDir}"/.
+  rm "${outfile}"
+  ${zProg} -c "${errfile}" >${errfile}.${zExt}
+  mv  "${errfile}.${zExt}" "${finalDir}"/.
+  rm "${errfile}"
+  #exit 10 # DEBUG
 }
 
 function processSBF() {
@@ -342,6 +407,9 @@ function processSBF() {
 
             # extract DOP data
             mkDOP "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+
+            # extract GLOtime data
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" GLOtime
 
             # make RINEX
             currRINEX="${rinexFile}"
@@ -415,6 +483,7 @@ while [[ ${#} -gt 0 ]]; do {
         noGEO*|NOGEO*|--nogeo* )      doGEO="no"; shift;;
         nostat*|NOSTAT*|--nostat* )   doStat="no"; shift;;
         noDOP*|NODOP*|--nodop* )      doDOP="no"; shift;;
+        noGLO*|NOGLO*|--noglo* )      doGLOtime="no"; shift;;
         dry*|--dry* )           dryrun="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
         gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;

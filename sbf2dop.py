@@ -137,9 +137,9 @@ For validation purposes, the output data also includes the GNSS Week Number\n\
 \n\
 WNc = number of weeks since GNSS epoch time (Jan 1 1980)\n\
 TOW = number of miliseconds since start of the current week\n\
-PDOP = Position Dilution of Precision
-VDOP = Velocity Dilution of Precision
-TDOP = Time Dilution of Precision
+PDOP = Position Dilution of Precision\n\
+VDOP = Velocity Dilution of Precision\n\
+TDOP = Time Dilution of Precision\n\
 ".format(headerText)
 
     parser = argparse.ArgumentParser(

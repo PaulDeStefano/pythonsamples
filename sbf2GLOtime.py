@@ -130,9 +130,9 @@ For validation purposes, the output data also includes the GNSS Week Number\n\
 \n\
 WNc = number of weeks since GNSS epoch time (Jan 1 1980)\n\
 TOW = number of miliseconds since start of the current week\n\
-SVID = weird satellite ID, but not PRN #
-N = day number
-tau_GPS = GPS difference from GLONASS time (document, is not clear on formula)
+SVID = weird satellite ID, but not PRN #\n\
+N = day number\n\
+tau_GPS = GPS difference from GLONASS time (document, is not clear on formula)\n\
 ".format(headerText)
 
     parser = argparse.ArgumentParser(
