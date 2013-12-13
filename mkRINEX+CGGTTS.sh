@@ -105,9 +105,9 @@ function mkRin() {
     if [ -z "${rin}" ]; then logMsg ERROR: need output name for RINEX data; exit 1; fi
     logMsg "NOTICE: processing SBF data into RINEX files..."
 
-    ${sbf2rinProg} -v -f "${sbf}" -o "${rin}" -R210 >/dev/null 2>/${rin}.log
-    ${sbf2rinProg} -v -f "${sbf}" -o "${rin%O}N" -n N -R210 >/dev/null 2>/${rin}.log
-    ${sbf2rinProg} -v -f "${sbf}" -o "${rin%O}G" -n G -R210 >/dev/null 2>/${rin}.log
+    ${sbf2rinProg} -v -f "${sbf}" -o "${rin}" -R210 >/dev/null 2>${rin}.log
+    ${sbf2rinProg} -v -f "${sbf}" -o "${rin%O}N" -n N -R210 >/dev/null 2>${rin%O}N.log
+    ${sbf2rinProg} -v -f "${sbf}" -o "${rin%O}G" -n G -R210 >/dev/null 2>${rin%O}G.log
     if [ ! ${?} -eq 0 ]; then {
         logMsg "WARNING: failed to process SBF data to RINEX."
     } fi
@@ -214,11 +214,15 @@ function mkOffset() {
   eval local offsetFinalDir="${offsetDir}"
   if [[ ! -d ${offsetFinalDir} ]]; then mkdir --parents ${offsetFinalDir}; fi
   logMsg "DEBUG: moving offset data to ${offsetFinalDir}/${offsetfile}.${zExt}"
-  ${zProg} -c "${offsetfile}" >${offsetfile}.${zExt}
-  mv  "${offsetfile}.${zExt}" "${offsetFinalDir}"/.
+  if [[ "yes" = "${clobber}" || ! -e ${offsetFinalDir}/${offsetfile}.${zExt} ]]; then {
+    ${zProg} -c "${offsetfile}" >${offsetfile}.${zExt}
+    mv  "${offsetfile}.${zExt}" "${offsetFinalDir}"/.
+    ${zProg} -c "${errfile}" >${errfile}.${zExt}
+    mv  "${errfile}.${zExt}" "${offsetFinalDir}"/.
+  } else {
+    logMsg "WARNING: Refused to overwrite ${offsetFinalDir}/${offsetfile}.${zExt}.  (--noclobber used)"
+  } fi
   rm "${offsetfile}"
-  ${zProg} -c "${errfile}" >${errfile}.${zExt}
-  mv  "${errfile}.${zExt}" "${offsetFinalDir}"/.
   rm "${errfile}"
 }
 
@@ -243,11 +247,15 @@ function mkPVTGeo() {
   /usr/local/bin/python2.7 "${sbf2pvtGeoProg}" "${sbfFile}" >"${pvtGeoFile}" 2>"${errfile}"
   if [[ ! -d ${pvtGeoFinalDir} ]]; then mkdir --parents ${pvtGeoFinalDir}; fi
   logMsg "DEBUG: moving PVTGeodetic data to ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt}"
-  ${zProg} -c "${pvtGeoFile}" >${pvtGeoFile}.${zExt}
-  mv  "${pvtGeoFile}.${zExt}" "${pvtGeoFinalDir}"/.
+  if [[ "yes" = "${clobber}" || ! -e ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt} ]]; then {
+    ${zProg} -c "${pvtGeoFile}" >${pvtGeoFile}.${zExt}
+    mv  "${pvtGeoFile}.${zExt}" "${pvtGeoFinalDir}"/.
+    ${zProg} -c "${errfile}" >${errfile}.${zExt}
+    mv  "${errfile}.${zExt}" "${pvtGeoFinalDir}"/.
+  } else {
+    logMsg "WARNING: Refused to overwrite ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt}.  (--noclobber used)"
+  } fi
   rm "${pvtGeoFile}"
-  ${zProg} -c "${errfile}" >${errfile}.${zExt}
-  mv  "${errfile}.${zExt}" "${pvtGeoFinalDir}"/.
   rm "${errfile}"
 }
 
@@ -270,12 +278,13 @@ function mkRxSatus() {
   logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
   /usr/local/bin/python2.7 "${sbf2statProg}" "${sbfFile}" >"${outfile}" 2>"${outfile%%dat}log"
   if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
-  logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
-  ${zProg} -c "${outfile}" >${outfile}.${zExt}
-  mv  "${outfile}.${zExt}" "${finalDir}"/.
+  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile}.${zExt} ]]; then {
+    ${zProg} -c "${outfile}" >${outfile}.${zExt}
+    mv  "${outfile}.${zExt}" "${finalDir}"/.
+  } else {
+    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.${zExt}.  (--noclobber used)"
+  } fi
   rm "${outfile}"
-  ${zProg} -c "${errfile}" >${errfile}.${zExt}
-  mv  "${errfile}.${zExt}" "${finalDir}"/.
   rm "${errfile}"
 }
 
@@ -296,14 +305,18 @@ function mkDOP() {
   eval local finalDir="${dopDir}"
   local errfile="${outfile%%dat}log"
   logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
-  /usr/local/bin/python2.7 "${sbf2dopProg}" "${sbfFile}" >"${outfile}" 2>"${outfile%%dat}log"
+  /usr/local/bin/python2.7 "${sbf2dopProg}" "${sbfFile}" >"${outfile}" 2>"${errfile}"
   if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
   logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
-  ${zProg} -c "${outfile}" >${outfile}.${zExt}
-  mv  "${outfile}.${zExt}" "${finalDir}"/.
+  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile}.${zExt} ]]; then {
+    ${zProg} -c "${outfile}" >${outfile}.${zExt}
+    mv  "${outfile}.${zExt}" "${finalDir}"/.
+    ${zProg} -c "${errfile}" >${errfile}.${zExt}
+    mv  "${errfile}.${zExt}" "${finalDir}"/.
+  } else {
+    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.${zExt}.  (--noclobber used)"
+  } fi
   rm "${outfile}"
-  ${zProg} -c "${errfile}" >${errfile}.${zExt}
-  mv  "${errfile}.${zExt}" "${finalDir}"/.
   rm "${errfile}"
 }
 
@@ -338,11 +351,15 @@ function sbfExtract() {
   /usr/local/bin/python2.7 "${extractProg}" "${sbfFile}" >"${outfile}" 2>"${errfile}"
   if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
   logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
-  ${zProg} -c "${outfile}" >${outfile}.${zExt}
-  mv  "${outfile}.${zExt}" "${finalDir}"/.
+  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile}.${zExt} ]]; then {
+    ${zProg} -c "${outfile}" >${outfile}.${zExt}
+    mv  "${outfile}.${zExt}" "${finalDir}"/.
+    ${zProg} -c "${errfile}" >${errfile}.${zExt}
+    mv  "${errfile}.${zExt}" "${finalDir}"/.
+  } else {
+    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.${zExt}.  (--noclobber used)"
+  } fi
   rm "${outfile}"
-  ${zProg} -c "${errfile}" >${errfile}.${zExt}
-  mv  "${errfile}.${zExt}" "${finalDir}"/.
   rm "${errfile}"
   #exit 10 # DEBUG
 }
@@ -432,10 +449,9 @@ function processSBF() {
                   continue
                 } fi
                 echo -n . 1>&2
-                rinZ=${rinfile}.gz
-                #eval rinStoreDir="${rinexTopDir}/${id}/${element}"
+                rinZ="${rinfile}.gz"
                 eval rinStoreDir="${rinexDir}"
-                storeFile=${rinStoreDir}/${rinZ}
+                storeFile="${rinStoreDir}/${rinZ}"
                 if [ ! -d ${rinStoreDir} ]; then mkdir --parents ${rinStoreDir}; fi
                 if [[ "yes" = "${clobber}" || ! -e ${storeFile} ]]; then {
                     gzip -c ${rinfile} >${rinZ}
