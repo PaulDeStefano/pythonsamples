@@ -161,7 +161,7 @@ function mkCGG() {
     eCode=$?
     logMsg "DEBUG: rin2ccg exit Code: ${eCode}"
     if [[ ${eCode} -eq 0 && -f CGGTTS.gps ]]; then
-        eval local cggFile="${cggTopDir}/${id}/${subDir}/CGGTTS.${id}.${typ}.yr${yr}.day${day}.mjd${mjd}"
+        eval local cggFile="${cggTopDir}/${rxName}/${subDir}/CGGTTS.${id}.${typ}.yr${yr}.day${day}.mjd${mjd}"
         local cggStoreDir=$(dirname ${cggFile})
         if [ ! -d ${cggStoreDir} ]; then mkdir --parents ${cggStoreDir}; fi
         logMsg "NOTICE: ...Done"

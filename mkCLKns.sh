@@ -33,6 +33,7 @@ extraRegex="${1}"
         -type f -iwholename "*.zip" \
         2>/dev/null \
         | egrep -i "${extraRegex}" \
+        | egrep -v /old/ \
         | sort \
     )
 

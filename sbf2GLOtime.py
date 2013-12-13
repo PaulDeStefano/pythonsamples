@@ -1,7 +1,7 @@
 #!/usr/local/bin/python2.7
 """ sbf2offset.py
     Reads SBF binary data files and produces plain text file
-    containing ReceiverStatus data
+    containing GLOTime data
 
     Copyright (C) 2013 Paul R. DeStefano
 
@@ -94,14 +94,13 @@ def doStuff(f) :
     #print('do stuff on file '+f+'...\n')
     with open(f,'r') as sbf_fobj:
       #for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'},limit=10):
-      for blockName, block in pysbf.load(sbf_fobj, blocknames={'ReceiverStatus_v2'}):
+      for blockName, block in pysbf.load(sbf_fobj, blocknames={'GLOTime'}):
         WNc=block['WNc']
         TOW=block['TOW']
-        CPULoad=block['CPULoad']
-        extError=block['ExtError']
-        upTime=block['UpTime']
-        rxState=block['RxState']
-        rxError=block['RxError']
+        SVID=block['SVID'] # weird sat id number, NOT PRN
+        N=block['N'] # Day number
+        tau_GPS=block['tau_GPS'] # GPS difference from GLONASS time (document, is not clear on formula)
+        tau_c=block['tau_c'] # "time scale correction to to UTC(SU)"
 
         timeSystem=0 # assume this is GNSS time
         try:
@@ -110,36 +109,36 @@ def doStuff(f) :
             stderr.write(str(e)+', skipping block (WNc={},TOW={},NrSV={},SignalInfo={},AlertFlag={})'.format(errCode,WNc,TOW,nrSV,signalInfo,alertFlag )+'\n')
             continue
         iso8601, unixtime, WNc, TOW, jd, mjd, dayOfYear = rcvrTime.getTuple()
-        print("{},{},{},{},{},{},{},{},{},{},{},{}".format(
+        print("{},{},{},{},{},{},{},{},{},{},{}".format(
                 iso8601, unixtime,
                 WNc, TOW, jd, mjd, dayOfYear,
-                CPULoad,
-                extError,
-                upTime,
-                rxState,rxError
+                SVID,N,tau_GPS,tau_c
                 ) )
 
 if __name__ == "__main__" :
-    #print('hi\n')
-    #print(sys.argv)
-    headerText='ISO_Date,UNIX_time,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,CPULoad,ExtError,UpTime,RxState,RxError'
+    headerText='ISO_Date,UNIX_time,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,SVID,N,tau_GPS,tau_c'
+    epilog="\
+This program reads the files given on the command line.  They must be binary\n\
+SBF formated files.  It locates any and all GLOTime blocks and prints the\n\
+ISO8601 date, UNIX time, and other data from each block.\n\
+\n\
+output format:\n\
+{}\n\
+\n\
+For validation purposes, the output data also includes the GNSS Week Number\n\
+(WNc) and Time of Week (TOW).\n\
+\n\
+WNc = number of weeks since GNSS epoch time (Jan 1 1980)\n\
+TOW = number of miliseconds since start of the current week\n\
+SVID = weird satellite ID, but not PRN #
+N = day number
+tau_GPS = GPS difference from GLONASS time (document, is not clear on formula)
+".format(headerText)
+
     parser = argparse.ArgumentParser(
             formatter_class=argparse.RawDescriptionHelpFormatter
-            ,description='Prints all Receiver Status values it finds in given files.'
-            ,epilog='''
-This program reads the files given on the command line.  They must be binary
-SBF formated files.  It locates any and all Receiver Status blocks and prints the
-ISO8601 date, and UNIX time, & other data from each block.
-
-output format:
-<isoDate>,<UNIXtime>,<SBF blk errCode>,<phi>,<lambda>,<height>,<rxClkBias>,<rxClkDrift>,<# Satellites in PVT>,<WNc>,<TOW>,<JulianDay>,<MJD>,<dayOfYear>,Mode,SignalInfo,AlertFlag
-
-For validation purposes, the output data also includes the GNSS Week Number
-(WNc) and Time of Week (TOW).
-
-WNc = number of weeks since GNSS epoch time (Jan 1 1980)
-TOW = number of miliseconds since start of the current week
-'''
+            ,description='Prints all GLOTime values it finds in given files.'
+            ,epilog=epilog
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')
     #parser.add_argument('--outfile',nargs='?',help='output file')

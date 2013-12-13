@@ -128,7 +128,7 @@ if __name__ == "__main__" :
             ,epilog='''
 This program reads the files given on the command line.  They must be binary
 SBF formated files.  It locates any and all xPPSOffset blocks and prints the
-ISO8601 date, xppsoffset, and UNIX time from each block.
+ISO8601 date, UNIX time, & other data from each block.
 
 output format:
 <isoDate>,<xPPSOffset>,<UNIXtime>,<WNc>,<TOW>,<JulianDay>,<MJD>
@@ -138,6 +138,7 @@ For validation purposes, the output data also includes the GNSS Week Number
 
 WNc = number of weeks since GNSS epoch time (Jan 1 1980)
 TOW = number of miliseconds since start of the current week
+xPPSOffset = xPPSOffset value, *rounded to nearest 3rd digit after decimal*
 '''
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')

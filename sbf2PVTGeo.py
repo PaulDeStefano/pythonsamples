@@ -130,11 +130,11 @@ if __name__ == "__main__" :
     #print(sys.argv)
     parser = argparse.ArgumentParser(
             formatter_class=argparse.RawDescriptionHelpFormatter
-            ,description='Prints all xPPSOffset values it finds in given files.'
+            ,description='Prints all PVTGeo values it finds in given files.'
             ,epilog='''
 This program reads the files given on the command line.  They must be binary
-SBF formated files.  It locates any and all xPPSOffset blocks and prints the
-ISO8601 date, xppsoffset, and UNIX time from each block.
+SBF formated files.  It locates any and all PVTGeo blocks and prints the
+ISO8601 date, and UNIX time, & other data from each block.
 
 output format:
 <isoDate>,<UNIXtime>,<SBF blk errCode>,<phi>,<lambda>,<height>,<rxClkBias>,<rxClkDrift>,<# Satellites in PVT>,<WNc>,<TOW>,<JulianDay>,<MJD>,<dayOfYear>,Mode,SignalInfo,AlertFlag
@@ -144,6 +144,9 @@ For validation purposes, the output data also includes the GNSS Week Number
 
 WNc = number of weeks since GNSS epoch time (Jan 1 1980)
 TOW = number of miliseconds since start of the current week
+phi = Phi angle measurement, Geodetic coordinates
+lmbd = Lambda angle measurement, Geodetic coordinates
+h = height above Geodetic datum surface 
 '''
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')

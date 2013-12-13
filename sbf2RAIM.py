@@ -129,7 +129,7 @@ if __name__ == "__main__" :
     headerText='ISO_Date,UNIX_time,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,IntegrityFlag,HorizontalERL-position(m),VertialERL-position(m),HERL-velocity(m/s),VERL-velocity(m/s),OverallModelStat(1/50000)'
     epilog="\
 This program reads the files given on the command line.  They must be binary\n\
-SBF formated files.  It locates any and all xPPSOffset blocks and prints the\n\
+SBF formated files.  It locates any and all RAIM blocks and prints the\n\
 ISO8601 date, xppsoffset, and UNIX time from each block.\n\
 \n\
 output format:\n\
@@ -140,11 +140,12 @@ For validation purposes, the output data also includes the GNSS Week Number\n\
 \n\
 WNc = number of weeks since GNSS epoch time (Jan 1 1980)\n\
 TOW = number of miliseconds since start of the current week\n\
+
 ".format(headerText)
 
     parser = argparse.ArgumentParser(
             formatter_class=argparse.RawDescriptionHelpFormatter
-            ,description='Prints all xPPSOffset values it finds in given files.'
+            ,description='Prints all RAIM values it finds in given files.'
             ,epilog=epilog
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')
