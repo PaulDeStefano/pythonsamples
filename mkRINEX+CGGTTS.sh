@@ -11,7 +11,7 @@ recvList="PT00 PT01 TOKA PT04"
 #recvNiceName[TOKA]="NM-ND280SeptentrioGPS-TOKA"
 #recvNiceName[PT04]="TravelerGPS-PT04"
 recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
-PT01:RnHutSeptentrioGPS-PT01
+PT01:KenkyutoSeptentrioGPS-PT01
 TOKA:NM-ND280SeptentrioGPS-TOKA
 PT04:TravelerGPS-PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
