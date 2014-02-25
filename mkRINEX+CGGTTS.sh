@@ -11,7 +11,7 @@ recvList="PT00 PT01 TOKA PT04"
 #recvNiceName[TOKA]="NM-ND280SeptentrioGPS-TOKA"
 #recvNiceName[PT04]="TravelerGPS-PT04"
 recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
-PT01:RnHutSeptentrioGPS-PT01
+PT01:KenkyutoSeptentrioGPS-PT01
 TOKA:NM-ND280SeptentrioGPS-TOKA
 PT04:TravelerGPS-PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
@@ -487,11 +487,21 @@ function processSBF() {
 
 while [[ ${#} -gt 0 ]]; do {
     case ${1} in 
+        allon|--allon  )              doRIN="yes";doCGG="yes";doOff="yes";doGEO="yes";doStat="yes";doDOP="yes";doGLOtime="yes"; shift;;
+        alloff|--alloff )             doRIN="no";doCGG="no";doOff="no";doGEO="no";doStat="no";doDOP="no";doGLOtime="no"; shift;;
+
         nocl*|noCL*|--nocl* )      clobber="no"; shift;;
         reb*|REB*|--reb* )      rebuild="yes"; shift;;
         rin*|RIN*|--rin* )      doRIN="yes"; shift;;
         cgg*|CGG*|--cgg* )      doCGG="yes"; doRIN="yes"; shift;;
         off*|OFF*|--off* )      doOff="yes"; shift;;
+        xpps*|XPPS*|--xpps* )   doOff="yes"; shift;;
+        xpps*|XPPS*|--xpps* )   doOff="yes"; shift;;
+        GEO*|GEO*|--geo* )      doGEO="yes"; shift;;
+        stat*|STAT*|--stat* )   doStat="yes"; shift;;
+        DOP*|DOP*|--dop* )      doDOP="yes"; shift;;
+        GLO*|GLO*|--glo* )      doGLOtime="yes"; shift;;
+
         norin*|NORIN*|--norin* )      doRIN="no"; doCGG="no"; shift;;
         nocgg*|NOCGG*|--nocgg* )      doCGG="no"; shift;;
         nooff*|NOOFF*|--nooff* )      doOff="no"; shift;;
@@ -500,6 +510,7 @@ while [[ ${#} -gt 0 ]]; do {
         nostat*|NOSTAT*|--nostat* )   doStat="no"; shift;;
         noDOP*|NODOP*|--nodop* )      doDOP="no"; shift;;
         noGLO*|NOGLO*|--noglo* )      doGLOtime="no"; shift;;
+
         dry*|--dry* )           dryrun="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
         gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;
