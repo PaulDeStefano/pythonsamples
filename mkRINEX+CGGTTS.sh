@@ -1,6 +1,9 @@
 #!/bin/bash
 
 
+export LD_LIBRARY_PATH=/usr/local/gcc-4.7.1/lib # req for sbfanalyzer
+export DISPLAY='' # req for sbfanalyzer
+
 #sbfTopDir="/home/t2k/public_html/post/gpsgroup/ptdata"
 sbfTopDir="/data-scratch"
 #resultsTopDir="./testTopDir"
@@ -10,11 +13,16 @@ recvList="PT00 PT01 TOKA PT04"
 #recvNiceName[PT01]="RnHutSeptentrioGPS-PT01"
 #recvNiceName[TOKA]="NM-ND280SeptentrioGPS-TOKA"
 #recvNiceName[PT04]="TravelerGPS-PT04"
+#recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
+#PT01:RnHutSeptentrioGPS-PT01
+#TOKA:NM-ND280SeptentrioGPS-TOKA
+#PT04:TravelerGPS-PT04"
 recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
 PT01:KenkyutoSeptentrioGPS-PT01
 TOKA:NM-ND280SeptentrioGPS-TOKA
 PT04:TravelerGPS-PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
+
 rinexTopDir="${resultsTopDir}/rinex"
 rinexDir='${rinexTopDir}/${rxName}/${element}'
 cggTopDir="${resultsTopDir}/cggtts"
@@ -42,6 +50,13 @@ sbf2GLOtime="/home/pdestefa/local/src/samples/sbf2GLOtime.py"
 GLOtimeTopDir="${resultsTopDir}/GLOtime"
 GLOtimeDir='${GLOtimeTopDir}/${rxName}/${element}'
 GLOtimeFileName='GLOtime.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+
+reportProg="/usr/local/RxTools/bin/sbfanalyzer"
+report1TopDir="${resultsTopDir}/sbfReport-GPSPerf"
+report1Dir='${report1TopDir}/${rxName}/${element}'
+report1Template='~pdestefa/local/src/samples/t2k.PPperformance.ppl'
+report1FileName='gpsPerf.${id}.${typ}.yr${yr}.day${day}.part${part}.pdf'
+
 sbfFileList="/tmp/sbfFileList.$$"
 zProg="lzop"
 zExt="lzo"
@@ -56,6 +71,7 @@ doStat="yes"
 doDOP="yes"
 doGLOtime="yes"
 dryrun="no"
+doReport1="no" # GPS Performance Report
 
 trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT 0
 
@@ -320,6 +336,7 @@ function mkDOP() {
   rm "${errfile}"
 }
 
+# generic extraction using given python script
 function sbfExtract() {
   local sbfFile="${1}"
   local id=${2}
@@ -362,6 +379,43 @@ function sbfExtract() {
   rm "${outfile}"
   rm "${errfile}"
   #exit 10 # DEBUG
+}
+
+function mkReport() {
+# make a report using the sbfanalyzer program and templates
+  local sbfFile="${1}"
+  local id=${2}
+  local rxName=$( getRxName "${id}" )
+  local element=${3}
+  local typ=${4}
+  local yr=${5}
+  local day=${6}
+  local part=${7}
+  local reportTemplate=${8}
+  local reportDir=${9}
+  local reportFileName=${10}
+  local doReport=${11}
+
+  if [[ ! "yes" = ${doReport} ]]; then logMsg "NOTICE: skipping report generation."; return 0; fi
+  logMsg "NOTICE: running report ${reportTemplate##*/}"
+  eval local outfile="${reportFileName}"
+  outfile="$( echo ${outfile} | sed 's/\.part0//')"
+  eval local finalDir="${reportDir}"
+  local errfile="${outfile%%pdf}log"
+  logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
+  ${reportProg} -f "${sbfFile}" --layoutfile "${reportTemplate}" \
+                --silent --logfile ${errfile} -o ${outfile}
+  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
+  logMsg "DEBUG: moving report file to ${finalDir}/${outfile}"
+  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile} ]]; then {
+    mv  "${outfile}" "${finalDir}"/.
+    ${zProg} -c "${errfile}" >${errfile}.${zExt}
+    mv  "${errfile}.${zExt}" "${finalDir}"/.
+  } else {
+    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.  (--noclobber used)"
+  } fi
+  #rm "${outfile}"
+  rm "${errfile}"
 }
 
 function processSBF() {
@@ -427,6 +481,10 @@ function processSBF() {
 
             # extract GLOtime data
             sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" GLOtime
+
+            # extract SBF GPS Performace Report
+            mkReport "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" "${report1Template}" "${report1Dir}" "${report1FileName}" "${doReport1}"
+            exit
 
             # make RINEX
             currRINEX="${rinexFile}"
@@ -501,6 +559,7 @@ while [[ ${#} -gt 0 ]]; do {
         stat*|STAT*|--stat* )   doStat="yes"; shift;;
         DOP*|DOP*|--dop* )      doDOP="yes"; shift;;
         GLO*|GLO*|--glo* )      doGLOtime="yes"; shift;;
+        rep1|REP1|--rep1)       doReport1="yes"; shift;;
 
         norin*|NORIN*|--norin* )      doRIN="no"; doCGG="no"; shift;;
         nocgg*|NOCGG*|--nocgg* )      doCGG="no"; shift;;
@@ -510,6 +569,7 @@ while [[ ${#} -gt 0 ]]; do {
         nostat*|NOSTAT*|--nostat* )   doStat="no"; shift;;
         noDOP*|NODOP*|--nodop* )      doDOP="no"; shift;;
         noGLO*|NOGLO*|--noglo* )      doGLOtime="no"; shift;;
+        norep1|NOREP1|--norep1)       doReport1="no"; shift;; #GPS Performance Report
 
         dry*|--dry* )           dryrun="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
