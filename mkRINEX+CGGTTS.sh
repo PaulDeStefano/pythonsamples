@@ -9,18 +9,6 @@ sbfTopDir="/data-scratch"
 #resultsTopDir="./testTopDir"
 resultsTopDir="/home/t2k/public_html/post/gpsgroup/ptdata/organizedData"
 recvList="PT00 PT01 TOKA PT04"
-#recvNiceName[PT00]="NU1SeptentrioGPS-PT00"
-#recvNiceName[PT01]="RnHutSeptentrioGPS-PT01"
-#recvNiceName[TOKA]="NM-ND280SeptentrioGPS-TOKA"
-#recvNiceName[PT04]="TravelerGPS-PT04"
-#recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
-#PT01:RnHutSeptentrioGPS-PT01
-#TOKA:NM-ND280SeptentrioGPS-TOKA
-#PT04:TravelerGPS-PT04"
-recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
-PT01:KenkyutoSeptentrioGPS-PT01
-TOKA:NM-ND280SeptentrioGPS-TOKA
-PT04:TravelerGPS-PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
 
 rinexTopDir="${resultsTopDir}/rinex"
@@ -50,6 +38,10 @@ sbf2GLOtime="/home/pdestefa/local/src/samples/sbf2GLOtime.py"
 GLOtimeTopDir="${resultsTopDir}/GLOtime"
 GLOtimeDir='${GLOtimeTopDir}/${rxName}/${element}'
 GLOtimeFileName='GLOtime.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+sbf2PVTSat="/home/pdestefa/local/src/samples/sbf2PVTSat.py"
+PVTSatTopDir="${resultsTopDir}/pvtSatCart"
+PVTSatDir='${PVTSatTopDir}/${rxName}/${element}'
+PVTSatFileName='pvtSat.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
 
 reportProg="/usr/local/RxTools/bin/sbfanalyzer"
 report1TopDir="${resultsTopDir}/sbfReport-GPSPerf"
@@ -70,6 +62,7 @@ doGEO="yes"
 doStat="yes"
 doDOP="yes"
 doGLOtime="yes"
+doPVTSat="no"
 dryrun="no"
 doReport1="no" # GPS Performance Report
 
@@ -81,7 +74,29 @@ function logMsg() {
 
 function getRxName() {
   local id=${1}
+  local yr=${2}
+  local day=${3}
+  logMsg "DEBUG: yr${yr} day${day}"
+
+  if [ -z "${day}" ]; then { logMsg "ERROR: getRxName requires 3rd parameter"; exit 1; } fi
   
+  # check RnHut vs Kenkyuto (Date moved: 2014.01.28)
+  if [ $yr -lt 14 ] || ( [ $day -le 028 ] && [ $yr -eq 14 ] ); then {
+    # should be RnHut
+    logMsg "DEBUG: Before move from RadonHut"
+recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
+PT01:RnHutSeptentrioGPS-PT01
+TOKA:NM-ND280SeptentrioGPS-TOKA
+PT04:TravelerGPS-PT04"
+  } else {
+    # should be Kenkyuto
+    logMsg "DEBUG: After move to Kenkyuto"
+recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
+PT01:KenkyutoSeptentrioGPS-PT01
+TOKA:NM-ND280SeptentrioGPS-TOKA
+PT04:TravelerGPS-PT04"
+  } fi
+
   local value=""
   for pair in ${recvNiceNameList}; do {
     if [[ ${pair} =~ ${id}.* ]]; then {
@@ -96,13 +111,11 @@ function getRxName() {
 function getSBF() {
     local element=${1}
     local id=$2
-    #local rxName=${recvNiceName[${id}]}
-    local rxName=$( getRxName ${id} )
     local extraRegex=${3}
     logMsg "NOTICE: working on element ${element}"
 
     # find SBF files
-    ( /usr/bin/find ${sbfTopDir}/sukrnh5/DATA ${sbfTopDir}/gpsptnu1 ${sbfTopDir}/triptgsc/nd280data ${sbfTopDir}/traveller-box \
+    ( /usr/bin/find ${sbfTopDir}/sukrnh5/DATA ${sbfTopDir}/gpsptnu1/DATA ${sbfTopDir}/triptgsc/nd280data ${sbfTopDir}/traveller-box \
         -type f -iwholename "*${element}*${id}*.??_*" \
         2>/dev/null \
         | egrep -i "${extraRegex}" \
@@ -135,8 +148,7 @@ function mkCGG() {
     local prev=${1}
     local curr=${2}
     local id=${3}
-    #local rxName=${recvNiceName[${id}]}
-    local rxName=$( getRxName "${id}" )
+    local rxName=$( getRxName "${id}" ${yr} ${day} )
     local subDir=${4}
     local typ=${5}
     local day=${6}
@@ -212,8 +224,7 @@ function mkCGG() {
 function mkOffset() {
   local sbfFile="${1}"
   local id=${2}
-  #local rxName=${recvNiceName[${id}]}
-  local rxName=$( getRxName "${id}" )
+  local rxName=$( getRxName "${id}" ${yr} ${day} )
   local element=${3}
   local typ=${4}
   local yr=${5}
@@ -245,8 +256,7 @@ function mkOffset() {
 function mkPVTGeo() {
   local sbfFile="${1}"
   local id=${2}
-  #local rxName=${recvNiceName[${id}]}
-  local rxName=$( getRxName "${id}" )
+  local rxName=$( getRxName "${id}" ${yr} ${day} )
   local element=${3}
   local typ=${4}
   local yr=${5}
@@ -278,7 +288,7 @@ function mkPVTGeo() {
 function mkRxSatus() {
   local sbfFile="${1}"
   local id=${2}
-  local rxName=$( getRxName "${id}" )
+  local rxName=$( getRxName "${id}" ${yr} ${day} )
   local element=${3}
   local typ=${4}
   local yr=${5}
@@ -307,7 +317,7 @@ function mkRxSatus() {
 function mkDOP() {
   local sbfFile="${1}"
   local id=${2}
-  local rxName=$( getRxName "${id}" )
+  local rxName=$( getRxName "${id}" ${yr} ${day} )
   local element=${3}
   local typ=${4}
   local yr=${5}
@@ -340,7 +350,7 @@ function mkDOP() {
 function sbfExtract() {
   local sbfFile="${1}"
   local id=${2}
-  local rxName=$( getRxName "${id}" )
+  local rxName=$( getRxName "${id}" ${yr} ${day} )
   local element=${3}
   local typ=${4}
   local yr=${5}
@@ -385,7 +395,7 @@ function mkReport() {
 # make a report using the sbfanalyzer program and templates
   local sbfFile="${1}"
   local id=${2}
-  local rxName=$( getRxName "${id}" )
+  local rxName=$( getRxName "${id}" ${yr} ${day} )
   local element=${3}
   local typ=${4}
   local yr=${5}
@@ -420,13 +430,10 @@ function mkReport() {
 
 function processSBF() {
     id=${1}
-    #local rxName=${recvNiceName["${id}"]}
-    local rxName=$( getRxName "${id}" )
     top=$PWD
-    #cd ${id}
     set +e
 
-    logMsg "working on id=${id},rxName=${rxName}"
+    logMsg "working on id=${id}"
 
     for element in ${pathGrps}; do {
         currSBF="currSBF"
@@ -453,6 +460,7 @@ function processSBF() {
             local part=${3}
             local yr=${4}
 
+            local rxName=$( getRxName "${id}" ${yr} ${day} ${yr} ${day} )
             logMsg "DEBUG: basename=${basename},unzipped=${unzipped},currSBF=${currSBF},rinexFile=${rinexFile},element=${element},id=${id},rxName=${rxName},typ=${typ},day=${day},part=${part},yr=${yr}"
             if [[ "yes" = "${dryrun}" ]]; then logMsg "NOTICE: DRY-RUN, skipping processing."; continue; fi
 
@@ -482,9 +490,11 @@ function processSBF() {
             # extract GLOtime data
             sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" GLOtime
 
+            # extract GLOtime data
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" PVTSat
+
             # extract SBF GPS Performace Report
             mkReport "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" "${report1Template}" "${report1Dir}" "${report1FileName}" "${doReport1}"
-            exit
 
             # make RINEX
             currRINEX="${rinexFile}"
@@ -545,10 +555,10 @@ function processSBF() {
 
 while [[ ${#} -gt 0 ]]; do {
     case ${1} in 
-        allon|--allon  )              doRIN="yes";doCGG="yes";doOff="yes";doGEO="yes";doStat="yes";doDOP="yes";doGLOtime="yes"; shift;;
-        alloff|--alloff )             doRIN="no";doCGG="no";doOff="no";doGEO="no";doStat="no";doDOP="no";doGLOtime="no"; shift;;
+        allon|--allon  )        doRIN="yes";doCGG="yes";doOff="yes";doGEO="yes";doStat="yes";doDOP="yes";doGLOtime="yes"; doPVTSat="yes"; shift;;
+        alloff|--alloff )       doRIN="no";doCGG="no";doOff="no";doGEO="no";doStat="no";doDOP="no";doGLOtime="no"; doPVTSat="no"; shift;;
 
-        nocl*|noCL*|--nocl* )      clobber="no"; shift;;
+        nocl*|noCL*|--nocl* )   clobber="no"; shift;;
         reb*|REB*|--reb* )      rebuild="yes"; shift;;
         rin*|RIN*|--rin* )      doRIN="yes"; shift;;
         cgg*|CGG*|--cgg* )      doCGG="yes"; doRIN="yes"; shift;;
@@ -559,7 +569,8 @@ while [[ ${#} -gt 0 ]]; do {
         stat*|STAT*|--stat* )   doStat="yes"; shift;;
         DOP*|DOP*|--dop* )      doDOP="yes"; shift;;
         GLO*|GLO*|--glo* )      doGLOtime="yes"; shift;;
-        rep1|REP1|--rep1)       doReport1="yes"; shift;;
+        rep1|REP1|--rep1)       doReport1="yes"; shift;; 
+        sats|SATS|--sats)       doPVTSat="yes"; shift;; # constellation breakdown
 
         norin*|NORIN*|--norin* )      doRIN="no"; doCGG="no"; shift;;
         nocgg*|NOCGG*|--nocgg* )      doCGG="no"; shift;;
@@ -570,6 +581,7 @@ while [[ ${#} -gt 0 ]]; do {
         noDOP*|NODOP*|--nodop* )      doDOP="no"; shift;;
         noGLO*|NOGLO*|--noglo* )      doGLOtime="no"; shift;;
         norep1|NOREP1|--norep1)       doReport1="no"; shift;; #GPS Performance Report
+        nosats|NOSATS|--nosats)       doPVTSat="no"; shift;; # constellation breakdown
 
         dry*|--dry* )           dryrun="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
