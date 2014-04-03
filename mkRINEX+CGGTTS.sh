@@ -76,21 +76,21 @@ function getRxName() {
   local id=${1}
   local yr=${2}
   local day=${3}
-  logMsg "DEBUG: yr${yr} day${day}"
+  #logMsg "DEBUG: yr${yr} day${day}"
 
   if [ -z "${day}" ]; then { logMsg "ERROR: getRxName requires 3rd parameter"; exit 1; } fi
   
   # check RnHut vs Kenkyuto (Date moved: 2014.01.28)
   if [ $yr -lt 14 ] || ( [ $day -le 028 ] && [ $yr -eq 14 ] ); then {
     # should be RnHut
-    logMsg "DEBUG: Before move from RadonHut"
+    #logMsg "DEBUG: Before move from RadonHut"
 recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
 PT01:RnHutSeptentrioGPS-PT01
 TOKA:NM-ND280SeptentrioGPS-TOKA
 PT04:TravelerGPS-PT04"
   } else {
     # should be Kenkyuto
-    logMsg "DEBUG: After move to Kenkyuto"
+    #logMsg "DEBUG: After move to Kenkyuto"
 recvNiceNameList="PT00:NU1SeptentrioGPS-PT00
 PT01:KenkyutoSeptentrioGPS-PT01
 TOKA:NM-ND280SeptentrioGPS-TOKA
