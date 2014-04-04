@@ -49,6 +49,11 @@ report1Dir='${report1TopDir}/${rxName}/${element}'
 report1Template='~pdestefa/local/src/samples/t2k.PPperformance.ppl'
 report1FileName='gpsPerf.${id}.${typ}.yr${yr}.day${day}.part${part}.pdf'
 
+consolidataDir="/data-scratch/paul/consolidataTestDir"
+gpstkbin=~gurfler/newgps/gpstk1.5/bin
+century=20
+consolidateToolsDir=~gurfler/newgps/consolidata
+
 sbfFileList="/tmp/sbfFileList.$$"
 zProg="lzop"
 zExt="lzo"
@@ -64,7 +69,10 @@ doDOP="yes"
 doGLOtime="yes"
 doPVTSat="no"
 dryrun="no"
-doReport1="no" # GPS Performance Report
+doReport1="no" # GPS Performance Report (incomplete)
+do3day="yes" # additional 3-day combination RINEX files
+doDailyConsol="yes" # consolidate data into daily consolidata files
+
 
 trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT 0
 
@@ -428,6 +436,94 @@ function mkReport() {
   rm "${errfile}"
 }
 
+function mk3day() {
+# make a combination RINEX file from three consecutive day RINEX files
+  local old="${1}"
+  local prev="${2}"
+  local curr="${3}"
+  local id=${4}
+  local element=${5}
+  local typ=${6}
+  local day=${7}
+  local yr=${8}
+  local part=${9}
+  local doThis=${10}
+
+  if [[ ! "yes" = ${doThis} ]]; then logMsg "NOTICE: skipping 3-day combo RINEX production"; return 0; fi
+
+  # TODO: check consecutive days
+  local prevDay=$(expr ${day} - 1 )   # the output date will be the previous day, middle of three files passed
+  local prevPrevDay=$(expr ${day} - 2 )   # the output date will be the previous day, middle of three files passed
+  if [[ ${curr} =~ ${id}${day} && ${prev} =~ ${id}${prevDay} && ${prev} =~ ${id}${prevDay} ]]; then {
+    logMsg "WARNING: skipping 3-day RINEX production, last 3 files are not in sequence";  return 0
+  } fi
+  
+  # choose the correct directory for consolidata/ using Nick's convention
+  local subDir=""
+  case ${id} in
+    ??00)             subDir=NU1;;
+    ??01)             subDir=SK;;
+    TOKA)             subDir=ND280;;
+    ??04)             subDir=Trav;;
+  esac
+
+  logMsg "NOTICE: running 3-day RINEX"
+  local dayDir=$(date --date="1 Jan ${century}${yr} + ${prevDay} days - 1 day" +%Y%m%d) # -1 day for not counting 1 Jan
+  eval local finalDir="${consolidataDir}/${subDir}/${dayDir}"
+  eval local outfile=${id}${prevDay}${part}c.${yr}O
+  local errfile="${outfile}.log"
+  logMsg "DEBUG: outfile=${outfile} errfile=${errfile} finalDir=${finalDir}"
+
+  # pick the start and end time for the first/oldest of three days: last 2 hours
+  local st=$(date --date="22:00:00 1 Jan ${century}${yr} + ${day} days - 2 days - 1 day" +%Y,%m,%d,%H,%M,%S) # -2 days before current day, as passed in; -1 extra day for January 1
+  local et=$(date --date="23:59:59 1 Jan ${century}${yr} + ${day} days - 2 days - 1 day" +%Y,%m,%d,%H,%M,%S)
+  $gpstkbin/EditRinex -IF"${oldRINEX}" \
+                      -OF"${oldRINEX}-3day" \
+                      -l"${oldRINEX}-3day.log" \
+                      -DST -DSS \
+                      -TB${st} -TE${et}
+  # take all of the second/previous day, this is the day we're working on
+  $gpstkbin/EditRinex -IF"${prevRINEX}" \
+                      -OF"${prevRINEX}-3day" \
+                      -l"${prevRINEX}-3day.log" \
+                      -DST -DSS
+  # take just the first 16 seconds of the thrid/current day
+  local st=$(date --date="00:00:00 1 Jan ${century}${yr} + ${day} days - 1 day" +%Y,%m,%d,%H,%M,%S)
+  local et=$(date --date="00:00:15 1 Jan ${century}${yr} + ${day} days - 1 day" +%Y,%m,%d,%H,%M,%S)
+  $gpstkbin/EditRinex -IF"${currRINEX}" \
+                      -OF"${currRINEX}-3day" \
+                      -l"${currRINEX}-3day.log" \
+                      -DST -DSS \
+                      -TB${st} -TE${et}
+
+  $gpstkbin/mergeRinObs -i "${oldRINEX}-3day" \
+                        -i "${prevRINEX}-3day" \
+                        -i "${currRINEX}-3day" \
+                        -o "${outfile}-tmp"
+                        #-o "${prevRINEX%%${day}}c.${yr}O"
+
+  # ???
+  cat "${outfile}-tmp" | /home/gurfler/newgps/RNXCMP_4.0.5_Linux_x86_32bit/bin/RNX2CRX > ${outfile}
+  # make a log file out of all previous logs
+  cat *-3day*.log > ${errfile}
+
+  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
+  logMsg "DEBUG: moving 3-day combined RINEX file to ${finalDir}/${outfile}"
+  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile} ]]; then {
+    ${zProg} -c "${outfile}" >${outfile}.${zExt}
+    mv  "${outfile}.${zExt}" "${finalDir}"/.
+    ${zProg} -c "${errfile}" >${errfile}.${zExt}
+    mv  "${errfile}.${zExt}" "${finalDir}"/.
+  } else {
+    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.  (--noclobber used)"
+  } fi
+
+  # clean up
+  for rmFile in *-3day* "${outfile}-tmp" ${outfile} ${errfile} ; do {
+    [ -e "${rmFile}" ] && rm "${rmFile}"
+  } done
+}
+
 function processSBF() {
     id=${1}
     top=$PWD
@@ -438,6 +534,7 @@ function processSBF() {
     for element in ${pathGrps}; do {
         currSBF="currSBF"
         prevRINEX=""
+        oldRINEX=""
 
         getSBF ${element} ${id} ${erex} > "${sbfFileList}"
         while read file; do {
@@ -498,6 +595,13 @@ function processSBF() {
 
             # make RINEX
             currRINEX="${rinexFile}"
+            eval rinStoreDir="${rinexDir}"
+            oldStoreFile="${rinStoreDir}/${currRINEX}.gz"
+            if [[ -f "${oldStoreFile}" && no = ${rebuild} ]]; then {
+              # pull copy form existing rinex datastore
+              logMsg "WARNING: retrieving RINEX file from storage: ${oldStoreFile}, not recreateing, rebuild=no"
+              gzip -dc ${oldStoreFile} > ${currRINEX}
+            } fi
             if [[ ! -e "${currRINEX}" || "yes" = "${rebuild}" ]]; then {
                 mkRin ${currSBF} ${currRINEX}
             } else {
@@ -509,6 +613,11 @@ function processSBF() {
                mkCGG ${prevRINEX} ${currRINEX} ${id} ${element} ${typ} ${day} ${yr}
             } fi
 
+            # make 3-day RINEX
+            if [[ ! -z "${oldRINEX}" && -e "${oldRINEX}" ]]; then {
+              mk3day ${oldRINEX} ${prevRINEX} ${currRINEX} ${id} ${element} ${typ} ${day} ${yr} ${part} ${do3day}
+            } fi
+
             # put RINEX file in organized location
             logMsg "NOTICE: compressing and storing RINEX data"
             for rinfile in ${rinexFile%O}*; do {
@@ -518,7 +627,7 @@ function processSBF() {
                 } fi
                 echo -n . 1>&2
                 rinZ="${rinfile}.gz"
-                eval rinStoreDir="${rinexDir}"
+                #eval rinStoreDir="${rinexDir}"
                 storeFile="${rinStoreDir}/${rinZ}"
                 if [ ! -d ${rinStoreDir} ]; then mkdir --parents ${rinStoreDir}; fi
                 if [[ "yes" = "${clobber}" || ! -e ${storeFile} ]]; then {
@@ -530,7 +639,9 @@ function processSBF() {
             } done
             logMsg "NOTICE: done."
 
-            if [[ ! -z "${prevRINEX%O}" ]]; then [ -f ${prevRINEX} ] && rm ${prevRINEX%O}*; fi
+            # rotate RINEX pointers to keep 3 days worth
+            if [[ ! -z "${oldRINEX%O}" ]]; then [ -f ${oldRINEX} ] && rm ${oldRINEX%O}*; fi
+            oldRINEX="${prevRINEX}"
             prevRINEX="${currRINEX}"
 
         } done < "${sbfFileList}"
@@ -555,8 +666,8 @@ function processSBF() {
 
 while [[ ${#} -gt 0 ]]; do {
     case ${1} in 
-        allon|--allon  )        doRIN="yes";doCGG="yes";doOff="yes";doGEO="yes";doStat="yes";doDOP="yes";doGLOtime="yes"; doPVTSat="yes"; shift;;
-        alloff|--alloff )       doRIN="no";doCGG="no";doOff="no";doGEO="no";doStat="no";doDOP="no";doGLOtime="no"; doPVTSat="no"; shift;;
+      allon|--allon  )        doRIN="yes";doCGG="yes";doOff="yes";doGEO="yes";doStat="yes";doDOP="yes";doGLOtime="yes"; doPVTSat="yes";do3day="yes"; shift;;
+      alloff|--alloff )       doRIN="no";doCGG="no";doOff="no";doGEO="no";doStat="no";doDOP="no";doGLOtime="no"; doPVTSat="no";do3day="no"; shift;;
 
         nocl*|noCL*|--nocl* )   clobber="no"; shift;;
         reb*|REB*|--reb* )      rebuild="yes"; shift;;
@@ -571,6 +682,7 @@ while [[ ${#} -gt 0 ]]; do {
         GLO*|GLO*|--glo* )      doGLOtime="yes"; shift;;
         rep1|REP1|--rep1)       doReport1="yes"; shift;; 
         sats|SATS|--sats)       doPVTSat="yes"; shift;; # constellation breakdown
+        3day|3DAY|--3day)       do3day="yes"; shift;; # 3-day combo RINEX files
 
         norin*|NORIN*|--norin* )      doRIN="no"; doCGG="no"; shift;;
         nocgg*|NOCGG*|--nocgg* )      doCGG="no"; shift;;
@@ -582,6 +694,7 @@ while [[ ${#} -gt 0 ]]; do {
         noGLO*|NOGLO*|--noglo* )      doGLOtime="no"; shift;;
         norep1|NOREP1|--norep1)       doReport1="no"; shift;; #GPS Performance Report
         nosats|NOSATS|--nosats)       doPVTSat="no"; shift;; # constellation breakdown
+        no3day|NO3DAY|--no3day)       do3day="no"; shift;; # 3-day combo RINEX files
 
         dry*|--dry* )           dryrun="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
