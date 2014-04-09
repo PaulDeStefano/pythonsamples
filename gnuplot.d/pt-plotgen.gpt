@@ -1,0 +1,28 @@
+## GNUplot script for making T2K TOF Precise Time plots
+
+#startTime=$0
+#print "DEBUG: startTime=".startTime
+#outFile=$1
+#print "DEBUG: outFile=".outFile
+#pltCmd = $2
+#print "DEBUG: pltCmd=".pltCmd
+#pltTitle=$3
+#print "DEBUG: pltTitle=".pltTitle
+#fileList=$4
+#print "DEBUG: fileList=".fileList
+#print "DEBUG: style=".styleExt
+
+gptDir='/home/pdestefa/local/src/t2k/samples/gnuplot.d/'
+call gptDir.'/pt-set4time.gp'
+call gptDir.'/pt-setTerm.gp'
+set title pltTitle
+set xrange [ startTime : * ]
+#show xrange # DEBUG
+set output outFile.".png"
+
+set ylabel 'time diff (ns)'
+set macros
+style1 = "points pointtype 1 linewidth 2 linecolor 1"
+style2 = "points pointtype 1 pointsize 1 linecolor 1"
+
+plot for [f in fileList] f using @pltCmd with @style2 title ''
