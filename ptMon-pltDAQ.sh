@@ -37,21 +37,22 @@
 outputDir=${1}
 siteName=${2}
 
+# force process to run nice
+renice 20 -p ${$} >/dev/null
+
 # Mapping from PT site installation names to data directories
-siteList="NU1:/home/pdestefa/tmp/t2kScratch/ptdata/gpsptnu1
-Super-K:/home/pdestefa/tmp/t2kScratch/ptdata/sukrnh5
-PT-Traveller:/home/pdestefa/tmp/t2kScratch/ptdata/traveller-box
-ND280:/home/pdestefa/tmp/t2kScratch/ptdata/triptgsc
+siteList="NU1:/data-scratch/gpsptnu1/DATA/LSU-TIC/TicData
+Super-K:/data-scratch/sukrnh5/DATA/LSU-TIC/TicData
 "
 daqFileNameExp='*OT-PT*.dat'
-tmpDir=/tmp
+tmpDir=$(mktemp -d '/tmp/ptMon-tmp.XXXXX')
 fileList=${tmpDir}/ptMon-filelist.$$
 unixTimeColumn=3
 dataColumn=2
-gnuPlotDir=/home/pdestefa/local/src/t2k/samples/gnuplot.d
+GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
 
 # clean up working files on interupt or hangup
-trap '[[ -e ${fileList} ]] && rm "${fileList}" ' EXIT 0
+trap '[[ -d ${tmpDir} ]] && rm -rf "${tmpDir}" ' EXIT 0
 
 function logMsg() {
 echo "$@" 1>&2
@@ -141,10 +142,10 @@ function mkPlots()
   getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
   local filesToPlot=$( cat ${fileList} )
 
-  local pltTitle="Precise Time - Official Time @ ${site}: ${dateSpec}"
+  local pltTitle="Precise Time - Official Time (at ${site}): ${dateSpec}"
   local style="points pointtype 1 linewidth 1 linecolor 1"
   # run plotter
-  #gnuplot ${gnuPlotDir}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
+  #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
   local gptCmds='startTime="'${startTime}'";'
   gptCmds=${gptCmds}'outFile="'${tmpDir}/outfile'";'
   gptCmds=${gptCmds}'pltCmd="'${unixTimeColumn}':($2 < 1.0 ? $'${dataColumn}'*10**9 : 1/0)";'
@@ -153,7 +154,7 @@ function mkPlots()
   #gptCmds=${gptCmds}'styleExt="'${styleName}'"'
   #logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   logMsg "NOTICE: making plots: ${site}: ${dateSpec}"
-  gnuplot -e "${gptCmds}" ${gnuPlotDir}/pt-plotgen.gpt
+  /usr/local/bin/gnuplot -e "${gptCmds}" ${GNUPLOT_LIB}/pt-plotgen.gpt
   #gnuplot -e 'startTime="'${startTime}'";outFile="'${tmpDir}'";pltCmd="using '${unixTimeColumn}':$('${dataColumn}'*10**9)";pltTitle="test title";fileList="'$file'"' gnuplot.d/pt-plotgen.gpt
 
   ## clean up
@@ -168,8 +169,8 @@ if [ ! -d "${outputDir}" ]; then logMsg "ERROR: cannot find output directory: ${
 
 # last 48 hours
 mkPlots "-3" "now - 48 hours" "${siteName}"
-mv ${tmpDir}/outfile.png ${tmpDir}/ptMon.${siteName}.48hours.png
+mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.48hours.png
 mkPlots "-8" "today - 7 days" "${siteName}"
-mv ${tmpDir}/outfile.png ${tmpDir}/ptMon.${siteName}.8days.png
+mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.8days.png
 mkPlots "-31" "today - 30 days" "${siteName}"
-mv ${tmpDir}/outfile.png ${tmpDir}/ptMon.${siteName}.30days.png
+mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.30days.png

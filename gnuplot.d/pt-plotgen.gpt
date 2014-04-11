@@ -12,15 +12,15 @@
 #print "DEBUG: fileList=".fileList
 #print "DEBUG: style=".styleExt
 
-gptDir='/home/pdestefa/local/src/t2k/samples/gnuplot.d/'
-call gptDir.'/pt-set4time.gp'
-call gptDir.'/pt-setTerm.gp'
+load 'pt-set4time.gp'
+load 'pt-setTerm.gp'
 set title pltTitle
 set xrange [ startTime : * ]
 #show xrange # DEBUG
 set output outFile.".png"
 
 set ylabel 'time diff (ns)'
+set grid
 set macros
 style1 = "points pointtype 1 linewidth 2 linecolor 1"
 style2 = "points pointtype 1 pointsize 1 linecolor 1"
