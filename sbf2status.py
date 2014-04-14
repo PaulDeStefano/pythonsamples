@@ -132,13 +132,17 @@ SBF formated files.  It locates any and all Receiver Status blocks and prints th
 ISO8601 date, and UNIX time, & other data from each block.
 
 output format:
-<isoDate>,<UNIXtime>,<SBF blk errCode>,<phi>,<lambda>,<height>,<rxClkBias>,<rxClkDrift>,<# Satellites in PVT>,<WNc>,<TOW>,<JulianDay>,<MJD>,<dayOfYear>,Mode,SignalInfo,AlertFlag
+<isoDate>,<UNIXtime>,WNc,TOW,JulianDay,MJD,dayOfYear,CPULoad,ExtError,UpTime,RxState,RxError
 
 For validation purposes, the output data also includes the GNSS Week Number
 (WNc) and Time of Week (TOW).
 
-WNc = number of weeks since GNSS epoch time (Jan 1 1980)
-TOW = number of miliseconds since start of the current week
+(See SBF Reference Guid, ReveiverSatus (v2) Block)
+CPULoad = Load on Receiver processor
+ExtError = BitField reportiner external errors
+UpTime = Number of seconds elapsed since the start-up of the receiver, or since the last reset
+RxState = Bit Field indicating the status of key components of the receiver
+RxError = Bit Field indicating whether an error occured previously.
 '''
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')
