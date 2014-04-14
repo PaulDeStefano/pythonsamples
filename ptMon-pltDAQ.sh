@@ -36,6 +36,7 @@
 
 outputDir=${1}
 siteName=${2}
+cycle=${3}
 
 # force process to run nice
 renice 20 -p ${$} >/dev/null
@@ -50,6 +51,7 @@ fileList=${tmpDir}/ptMon-filelist.$$
 unixTimeColumn=3
 dataColumn=2
 GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
+loadAvgLimit=11
 
 # clean up working files on interupt or hangup
 trap '[[ -d ${tmpDir} ]] && rm -rf "${tmpDir}" ' EXIT 0
@@ -162,16 +164,42 @@ function mkPlots()
   rm ${fileList}
 }
 
+function mk48h() {
+    mkPlots "-3" "now - 48 hours" "${siteName}"
+    mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.48hours.png
+}
+
+function mk7day() {
+    mkPlots "-8" "today - 7 days" "${siteName}"
+    mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.8days.png
+}
+
+function mk30day() {
+    mkPlots "-31" "today - 30 days" "${siteName}"
+    mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.30days.png
+}
+
 ## MAIN ##
 
+set -e
+if [ -z "${cycle}" ]; then logMsg "ERROR: third parameter, cycle, required but missing."; exit 1; fi
 if [ -z "${siteName}" ]; then logMsg "ERROR: second parameter, site name, required but missing."; exit 1; fi
 if [ -z "${outputDir}" ]; then logMsg "ERROR: first parameter, output directory, required but missing."; exit 1; fi
 if [ ! -d "${outputDir}" ]; then logMsg "ERROR: cannot find output directory: ${outputDir}"; exit 1; fi
 
-# last 48 hours
-mkPlots "-3" "now - 48 hours" "${siteName}"
-mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.48hours.png
-mkPlots "-8" "today - 7 days" "${siteName}"
-mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.8days.png
-mkPlots "-31" "today - 30 days" "${siteName}"
-mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.30days.png
+loadAvg=$(uptime | awk '{print $(NF-2)}' |sed 's/,//')
+if echo ${loadAvg} ${loadAvgLimit} | awk 'END { exit ( ! ($1 >= $2) ) }' ; then {
+  # load average is too high
+  logMsg "ERROR: load average is too high: ${loadAvg} >= ${loadAvgLimit}: aborting"
+  exit 1
+} fi
+
+set +e
+case "${cycle}" in
+  live|--live)        mk48h ;;
+
+  da*|--da*)          mk48h; mk7day;;
+
+  week*|--week*)      mk48h; mk7day; mk30day;;
+
+esac

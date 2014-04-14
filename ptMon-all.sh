@@ -36,6 +36,8 @@
 #===============================================================================
 
 outputTopDir=${1}
+cycle=${2}
+if [ -z "${cycle}" ]; then echo "ERROR: parameter #2 required, cycle type" 1>&2; exit 1; fi
 if [ -z "${outputTopDir}" ]; then echo "ERROR: parameter #1 required, output directory" 1>&2; exit 1; fi
 if [ ! -d "${outputTopDir}" ]; then echo "ERROR: cannot find log directory: ${outputTopDir}" 1>&2; exit 1; fi
 
@@ -46,16 +48,16 @@ function mkDAQplots() {
   local site="NU1"
   local outputDir="${outputTopDir}/NU1"
   local logFile="${outputDir}/ptMon.${site}.rawDAQ.log"
-  ptMon-pltDAQ.sh "${outputDir}" "NU1" >"${logFile}" 2>&1
-  echo "...done"
+  ptMon-pltDAQ.sh "${outputDir}" "NU1" "${cycle}" >"${logFile}" 2>&1 &
 
   echo "Running pltDAQ for Super-K..."
   site="Super-K"
   outputDir="${outputTopDir}/SK"
   logFile="${outputDir}/ptMon.${site}.rawDAQ.log"
-  ptMon-pltDAQ.sh "${outputDir}" "Super-K" >"${logFile}" 2>&1
-  echo "...done"
+  ptMon-pltDAQ.sh "${outputDir}" "Super-K" "${cycle}" >"${logFile}" 2>&1 &
 
+  wait
+  echo "...done: $?"
 }
 
 ## MAIN ##
