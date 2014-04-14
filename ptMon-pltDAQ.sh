@@ -169,8 +169,8 @@ if [ ! -d "${outputDir}" ]; then logMsg "ERROR: cannot find output directory: ${
 
 # last 48 hours
 mkPlots "-3" "now - 48 hours" "${siteName}"
-mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.48hours.png
+mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.48hours.png
 mkPlots "-8" "today - 7 days" "${siteName}"
-mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.8days.png
+mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.8days.png
 mkPlots "-31" "today - 30 days" "${siteName}"
-mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.30days.png
+mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.30days.png
