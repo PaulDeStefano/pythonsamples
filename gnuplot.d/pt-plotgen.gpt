@@ -1,19 +1,16 @@
 ## GNUplot script for making T2K TOF Precise Time plots
 
-#startTime=$0
+useCSV="$0"
+print "DEBUG: useCSV=".useCSV
 #print "DEBUG: startTime=".startTime
-#outFile=$1
 #print "DEBUG: outFile=".outFile
-#pltCmd = $2
 #print "DEBUG: pltCmd=".pltCmd
-#pltTitle=$3
 #print "DEBUG: pltTitle=".pltTitle
-#fileList=$4
 #print "DEBUG: fileList=".fileList
-#print "DEBUG: style=".styleExt
 
 load 'pt-set4time.gp'
 load 'pt-setTerm.gp'
+if ( useCSV ne "" ) { load 'pt-set4csv.gp'; }
 set title pltTitle
 set xrange [ startTime : * ]
 #show xrange # DEBUG
@@ -24,5 +21,11 @@ set grid
 set macros
 style1 = "points pointtype 1 linewidth 2 linecolor 1"
 style2 = "points pointtype 1 pointsize 1 linecolor 1"
+if ( exist( "styleExt" ) ) { 
+  style3 = styleExt
+} else {
+  style3 = style2
+}
+print "DEBUG: using style=".style3
 
-plot for [f in fileList] f using @pltCmd with @style2 title ''
+plot for [f in fileList] f using @pltCmd with @style3 title ''
