@@ -153,9 +153,10 @@ function mkPlots()
   gptCmds=${gptCmds}'fileList="'${filesToPlot}'"'
   #gptCmds=${gptCmds}'styleExt="'${styleName}'"'
   #logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
-  logMsg "NOTICE: making plots: ${site}: ${dateSpec}"
+  logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${site}:${dateSpec}"
   /usr/local/bin/gnuplot -e "${gptCmds}" ${GNUPLOT_LIB}/pt-plotgen.gpt
   #gnuplot -e 'startTime="'${startTime}'";outFile="'${tmpDir}'";pltCmd="using '${unixTimeColumn}':$('${dataColumn}'*10**9)";pltTitle="test title";fileList="'$file'"' gnuplot.d/pt-plotgen.gpt
+  logMsg "NOTICE: $(date --rfc-3339=seconds): ...done"
 
   ## clean up
   rm ${fileList}
