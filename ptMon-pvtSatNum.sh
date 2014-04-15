@@ -36,6 +36,7 @@
 
 outputDir=${1}
 siteName=${2}
+cycle=${3}
 
 # force process to run nice
 renice 20 -p ${$} >/dev/null
@@ -50,11 +51,13 @@ Trav:${commonRoot}/${typeDir}/TravSeptentrioGPS-PT04
 "
 daqFileNameExp='*pvtGeo*.dat.*'
 daqFileExclude='^ISO'
+pltType=pvtGeo
 tmpDir=$(mktemp -d '/tmp/ptMon-tmp.XXXXX')
 fileList=${tmpDir}/ptMon-filelist.$$
 unixTimeColumn=2
 dataColumn=9
 useCSV="CSV"
+loadAvgLimit=11
 
 DEBUG=no
 GNUPLOT_LIB=${GNUPLOT_LIB}:/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
@@ -251,19 +254,45 @@ function mkPlots()
   rm ${fileList}
 }
 
+function mk48h() {
+  mkPlots "-3" "00:00 2 days ago" "${siteName}"
+  mv "${tmpDir}/outfile.png" "${outputDir}/ptMon.${siteName}.${pltType}.48hours.png"
+}
+
+function mk7day() {
+  mkPlots "-8" "00:00 7 days ago" "${siteName}"
+  mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.${pltType}.8days.png
+}
+
+function mk30day() {
+  mkPlots "-31" "00:00 30 days ago" "${siteName}"
+  mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.${pltType}.30days.png
+}
+
 ## MAIN ##
 
+set -e
+if [ -z "${cycle}" ]; then logMsg "ERROR: third parameter, cycle, required but missing."; exit 1; fi
 if [ -z "${siteName}" ]; then logMsg "ERROR: second parameter, site name, required but missing."; exit 1; fi
 if [ -z "${outputDir}" ]; then logMsg "ERROR: first parameter, output directory, required but missing."; exit 1; fi
 if [ ! -d "${outputDir}" ]; then logMsg "ERROR: cannot find output directory: ${outputDir}"; exit 1; fi
 pltProg="$(which gnuplot)"
 if [ ! -e ${pltProg} ]; then logMsg "ERROR: cannot find gnuplot in PATH"; exit 1; fi
 
-pltType="pvtGeo"
-# last 48 hours
-mkPlots "-3" "00:00 2 days ago" "${siteName}"
-mv "${tmpDir}/outfile.png" "${outputDir}/ptMon.${siteName}.${pltType}.48hours.png"
-mkPlots "-8" "00:00 7 days ago" "${siteName}"
-mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.${pltType}.8days.png
-mkPlots "-31" "00:00 30 days ago" "${siteName}"
-mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.${pltType}.30days.png
+loadAvg=$(uptime | awk '{print $(NF-2)}' |sed 's/,//')
+if echo ${loadAvg} ${loadAvgLimit} | awk 'END { exit ( ! ($1 >= $2) ) }' ; then {
+  # load average is too high
+  logMsg "ERROR: load average is too high: ${loadAvg} >= ${loadAvgLimit}: aborting"
+  exit 1
+} fi
+
+
+set +e
+case "${cycle}" in
+  live|--live)        mk48h ;;
+
+  da*|--da*)          mk48h; mk7day;;
+
+  week*|--week*)      mk48h; mk7day; mk30day;;
+
+esac
