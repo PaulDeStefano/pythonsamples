@@ -50,10 +50,10 @@ clobber="yes"
 rebuild="no"
 doRIN="yes"
 doCGG="yes"
-doOff="yes"
-doGEO="yes"
-doStat="yes"
-doDOP="yes"
+dooffset="yes"
+dopvtGeo="yes"
+dorxStat="yes"
+dodop="yes"
 doGLOtime="yes"
 dryrun="no"
 
@@ -216,133 +216,6 @@ function mkCGG() {
     rm ${rmList}
 }
 
-function mkOffset() {
-  local sbfFile="${1}"
-  local id=${2}
-  #local rxName=${recvNiceName[${id}]}
-  local rxName=$( getRxName "${id}" )
-  local element=${3}
-  local typ=${4}
-  local yr=${5}
-  local day=${6}
-  local part=${7}
-
-  if [[ ! "yes" = ${doOff} ]]; then logMsg "NOTICE: skipping xPPSOffset production."; return 0; fi
-  logMsg "NOTICE: extracting xPPSOffset data"
-  eval local offsetfile="${offsetFileName}"
-  offsetfile="$( echo ${offsetfile} | sed 's/\.part0//')"
-  local errfile="${offsetfile%%dat}log"
-  logMsg "DEBUG: outfile=${offsetfile} errfile=${errfile}"
-  /usr/local/bin/python2.7 "${sbf2offsetProg}" "${sbfFile}" >"${offsetfile}" 2>"${errfile}"
-  eval local offsetFinalDir="${offsetDir}"
-  if [[ ! -d ${offsetFinalDir} ]]; then mkdir --parents ${offsetFinalDir}; fi
-  logMsg "DEBUG: moving offset data to ${offsetFinalDir}/${offsetfile}.${zExt}"
-  if [[ "yes" = "${clobber}" || ! -e ${offsetFinalDir}/${offsetfile}.${zExt} ]]; then {
-    ${zProg} -c "${offsetfile}" >${offsetfile}.${zExt}
-    mv  "${offsetfile}.${zExt}" "${offsetFinalDir}"/.
-    ${zProg} -c "${errfile}" >${errfile}.${zExt}
-    mv  "${errfile}.${zExt}" "${offsetFinalDir}"/.
-  } else {
-    logMsg "WARNING: Refused to overwrite ${offsetFinalDir}/${offsetfile}.${zExt}.  (--noclobber used)"
-  } fi
-  rm "${offsetfile}"
-  rm "${errfile}"
-}
-
-function mkPVTGeo() {
-  local sbfFile="${1}"
-  local id=${2}
-  #local rxName=${recvNiceName[${id}]}
-  local rxName=$( getRxName "${id}" )
-  local element=${3}
-  local typ=${4}
-  local yr=${5}
-  local day=${6}
-  local part=${7}
-
-  if [[ ! "yes" = ${doGEO} ]]; then logMsg "NOTICE: skipping CGGTTS production."; return 0; fi
-  logMsg "NOTICE: extracting PVTGeodetic data"
-  eval local pvtGeoFile="${pvtGeoFileName}"
-  pvtGeoFile="$( echo ${pvtGeoFile} | sed 's/\.part0//')"
-  eval local pvtGeoFinalDir="${pvtGeoDir}"
-  local errfile="${pvtGeoFile%%dat}log"
-  logMsg "DEBUG: outfile=${pvtGeoFile} errfile=${errfile}"
-  /usr/local/bin/python2.7 "${sbf2pvtGeoProg}" "${sbfFile}" >"${pvtGeoFile}" 2>"${errfile}"
-  if [[ ! -d ${pvtGeoFinalDir} ]]; then mkdir --parents ${pvtGeoFinalDir}; fi
-  logMsg "DEBUG: moving PVTGeodetic data to ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt}"
-  if [[ "yes" = "${clobber}" || ! -e ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt} ]]; then {
-    ${zProg} -c "${pvtGeoFile}" >${pvtGeoFile}.${zExt}
-    mv  "${pvtGeoFile}.${zExt}" "${pvtGeoFinalDir}"/.
-    ${zProg} -c "${errfile}" >${errfile}.${zExt}
-    mv  "${errfile}.${zExt}" "${pvtGeoFinalDir}"/.
-  } else {
-    logMsg "WARNING: Refused to overwrite ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt}.  (--noclobber used)"
-  } fi
-  rm "${pvtGeoFile}"
-  rm "${errfile}"
-}
-
-function mkRxSatus() {
-  local sbfFile="${1}"
-  local id=${2}
-  local rxName=$( getRxName "${id}" )
-  local element=${3}
-  local typ=${4}
-  local yr=${5}
-  local day=${6}
-  local part=${7}
-
-  if [[ ! "yes" = ${doStat} ]]; then logMsg "NOTICE: skipping RxStatus production."; return 0; fi
-  logMsg "NOTICE: extracting RxStatus data"
-  eval local outfile="${rxStatFileName}"
-  outfile="$( echo ${outfile} | sed 's/\.part0//')"
-  eval local finalDir="${rxStatDir}"
-  local errfile="${outfile%%dat}log"
-  logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
-  /usr/local/bin/python2.7 "${sbf2statProg}" "${sbfFile}" >"${outfile}" 2>"${outfile%%dat}log"
-  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
-  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile}.${zExt} ]]; then {
-    ${zProg} -c "${outfile}" >${outfile}.${zExt}
-    mv  "${outfile}.${zExt}" "${finalDir}"/.
-  } else {
-    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.${zExt}.  (--noclobber used)"
-  } fi
-  rm "${outfile}"
-  rm "${errfile}"
-}
-
-function mkDOP() {
-  local sbfFile="${1}"
-  local id=${2}
-  local rxName=$( getRxName "${id}" )
-  local element=${3}
-  local typ=${4}
-  local yr=${5}
-  local day=${6}
-  local part=${7}
-
-  if [[ ! "yes" = ${doDOP} ]]; then logMsg "NOTICE: skipping DOP production."; return 0; fi
-  logMsg "NOTICE: extracting DOP data"
-  eval local outfile="${dopFileName}"
-  outfile="$( echo ${outfile} | sed 's/\.part0//')"
-  eval local finalDir="${dopDir}"
-  local errfile="${outfile%%dat}log"
-  logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
-  /usr/local/bin/python2.7 "${sbf2dopProg}" "${sbfFile}" >"${outfile}" 2>"${errfile}"
-  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
-  logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
-  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile}.${zExt} ]]; then {
-    ${zProg} -c "${outfile}" >${outfile}.${zExt}
-    mv  "${outfile}.${zExt}" "${finalDir}"/.
-    ${zProg} -c "${errfile}" >${errfile}.${zExt}
-    mv  "${errfile}.${zExt}" "${finalDir}"/.
-  } else {
-    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.${zExt}.  (--noclobber used)"
-  } fi
-  rm "${outfile}"
-  rm "${errfile}"
-}
-
 # puts extracted data into the final archive location
 function storeData() {
   local dataFile="${1}"
@@ -468,16 +341,16 @@ function processSBF() {
             } fi 
 
             # extract xPPSOffset data
-            mkOffset "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" offset
 
             # extract PVTGeodetic data
-            mkPVTGeo "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" pvtGeo
 
             # extract rxStatus data
-            mkRxSatus "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" rxStat
 
             # extract DOP data
-            mkDOP "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" dop
 
             # extract GLOtime data
             sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" GLOtime
@@ -541,28 +414,28 @@ function processSBF() {
 
 while [[ ${#} -gt 0 ]]; do {
     case ${1} in 
-        allon|--allon  )              doRIN="yes";doCGG="yes";doOff="yes";doGEO="yes";doStat="yes";doDOP="yes";doGLOtime="yes"; shift;;
-        alloff|--alloff )             doRIN="no";doCGG="no";doOff="no";doGEO="no";doStat="no";doDOP="no";doGLOtime="no"; shift;;
+        allon|--allon  )              doRIN="yes";doCGG="yes";dooffset="yes";dopvtGeo="yes";dorxStat="yes";dodop="yes";doGLOtime="yes"; shift;;
+        alloff|--alloff )             doRIN="no";doCGG="no";dooffset="no";dopvtGeo="no";dorxStat="no";dodop="no";doGLOtime="no"; shift;;
 
         nocl*|noCL*|--nocl* )      clobber="no"; shift;;
         reb*|REB*|--reb* )      rebuild="yes"; shift;;
         rin*|RIN*|--rin* )      doRIN="yes"; shift;;
         cgg*|CGG*|--cgg* )      doCGG="yes"; doRIN="yes"; shift;;
-        off*|OFF*|--off* )      doOff="yes"; shift;;
-        xpps*|XPPS*|--xpps* )   doOff="yes"; shift;;
-        xpps*|XPPS*|--xpps* )   doOff="yes"; shift;;
-        GEO*|GEO*|--geo* )      doGEO="yes"; shift;;
-        stat*|STAT*|--stat* )   doStat="yes"; shift;;
-        DOP*|DOP*|--dop* )      doDOP="yes"; shift;;
+        off*|OFF*|--off* )      dooffset="yes"; shift;;
+        xpps*|XPPS*|--xpps* )   dooffset="yes"; shift;;
+        xpps*|XPPS*|--xpps* )   dooffset="yes"; shift;;
+        geo*|GEO*|--geo* )      dopvtGeo="yes"; shift;;
+        stat*|STAT*|--stat* )   dorxStat="yes"; shift;;
+        DOP*|DOP*|--dop* )      dodop="yes"; shift;;
         GLO*|GLO*|--glo* )      doGLOtime="yes"; shift;;
 
         norin*|NORIN*|--norin* )      doRIN="no"; doCGG="no"; shift;;
         nocgg*|NOCGG*|--nocgg* )      doCGG="no"; shift;;
-        nooff*|NOOFF*|--nooff* )      doOff="no"; shift;;
-        noxpps*|NOXPPS*|--noxpps* )   doOff="no"; shift;;
-        noGEO*|NOGEO*|--nogeo* )      doGEO="no"; shift;;
-        nostat*|NOSTAT*|--nostat* )   doStat="no"; shift;;
-        noDOP*|NODOP*|--nodop* )      doDOP="no"; shift;;
+        nooff*|NOOFF*|--nooff* )      dooffset="no"; shift;;
+        noxpps*|NOXPPS*|--noxpps* )   dooffset="no"; shift;;
+        nogeo*|NOGEO*|--nogeo* )      dopvtGeo="no"; shift;;
+        nostat*|NOSTAT*|--nostat* )   dorxStat="no"; shift;;
+        noDOP*|NODOP*|--nodop* )      dodop="no"; shift;;
         noGLO*|NOGLO*|--noglo* )      doGLOtime="no"; shift;;
 
         dry*|--dry* )           dryrun="yes"; shift;;
