@@ -107,7 +107,7 @@ function mkRin() {
 
     if [[ ! "yes" = ${doRIN} ]]; then logMsg "NOTICE: skipping RINEX production."; return 0; fi
 
-    if [ -z "${rin}" ]; then logMsg ERROR: need output name for RINEX data; exit 1; fi
+    if [ -z "${rin}" ]; then logMsg "ERROR: need output name for RINEX data"; exit 1; fi
     logMsg "NOTICE: processing SBF data into RINEX files..."
 
     ${sbf2rinProg} -v -f "${sbf}" -o "${rin}" -R210 >/dev/null 2>${rin}.log
