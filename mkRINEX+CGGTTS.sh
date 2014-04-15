@@ -57,7 +57,12 @@ doDOP="yes"
 doGLOtime="yes"
 dryrun="no"
 
-trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT 0
+origWD="${PWD}"
+tmpDir=$(mktemp -d /tmp/mkRINEX.XXXXX)
+cd "${tmpDir}"
+
+#trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT 0
+trap 'cd "${origWD}"; rm -rf "${tmpDir}"' EXIT 0
 
 function logMsg() {
     echo "$@" 1>&2
