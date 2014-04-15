@@ -1,58 +1,22 @@
 #!/bin/bash
 
+# force nice value of 19
+renice 19 -p $$ >/dev/null 2>&1
 
 export LD_LIBRARY_PATH=/usr/local/gcc-4.7.1/lib # req for sbfanalyzer
 export DISPLAY='' # req for sbfanalyzer
 
-#sbfTopDir="/home/t2k/public_html/post/gpsgroup/ptdata"
+# DEFAULT configuration values
+confErr=""
 sbfTopDir="/data-scratch"
-#resultsTopDir="./testTopDir"
+#sbfTopDir="/home/t2k/public_html/post/gpsgroup/ptdata"
 resultsTopDir="/home/t2k/public_html/post/gpsgroup/ptdata/organizedData"
+#resultsTopDir="./testTopDir"
 recvList="PT00 PT01 TOKA PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
-
-rinexTopDir="${resultsTopDir}/rinex"
-rinexDir='${rinexTopDir}/${rxName}/${element}'
-cggTopDir="${resultsTopDir}/cggtts"
-cggParam="paramCGGTTS.dat"
-sbf2rinProg="/usr/local/RxTools/bin/sbf2rin"
-rin2cggProg="/usr/local/RxTools/bin/rin2cgg"
-rinFileName='${id}${day}'
-sbf2offsetProg="/home/pdestefa/local/src/samples/sbf2offset.py"
-offsetTopDir="${resultsTopDir}/xPPSOffsets"
-offsetDir='${offsetTopDir}/${rxName}/${element}'
-offsetFileName='xppsoffset.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbf2pvtGeoProg="/home/pdestefa/local/src/samples/sbf2PVTGeo.py"
-pvtGeoTopDir="${resultsTopDir}/pvtGeodetic"
-pvtGeoDir='${pvtGeoTopDir}/${rxName}/${element}'
-pvtGeoFileName='pvtGeo.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbf2statProg="/home/pdestefa/local/src/samples/sbf2status.py"
-rxStatTopDir="${resultsTopDir}/rxStatus"
-rxStatDir='${rxStatTopDir}/${rxName}/${element}'
-rxStatFileName='rxStatus.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbf2dopProg="/home/pdestefa/local/src/samples/sbf2dop.py"
-dopTopDir="${resultsTopDir}/rxDOP"
-dopDir='${dopTopDir}/${rxName}/${element}'
-dopFileName='rxDOP.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbf2GLOtime="/home/pdestefa/local/src/samples/sbf2GLOtime.py"
-GLOtimeTopDir="${resultsTopDir}/GLOtime"
-GLOtimeDir='${GLOtimeTopDir}/${rxName}/${element}'
-GLOtimeFileName='GLOtime.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbf2PVTSat="/home/pdestefa/local/src/samples/sbf2PVTSat.py"
-PVTSatTopDir="${resultsTopDir}/pvtSatCart"
-PVTSatDir='${PVTSatTopDir}/${rxName}/${element}'
-PVTSatFileName='pvtSat.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-
-reportProg="/usr/local/RxTools/bin/sbfanalyzer"
-report1TopDir="${resultsTopDir}/sbfReport-GPSPerf"
-report1Dir='${report1TopDir}/${rxName}/${element}'
-report1Template='~pdestefa/local/src/samples/t2k.PPperformance.ppl'
-report1FileName='gpsPerf.${id}.${typ}.yr${yr}.day${day}.part${part}.pdf'
-
-consolidataDir="/data-scratch/paul/consolidataTestDir"
 gpstkbin=~gurfler/newgps/gpstk1.5/bin
-century=20
 consolidateToolsDir=~gurfler/newgps/consolidata
+consolidataDir="/data-scratch/paul/consolidataTestDir"
 
 sbfFileList="/tmp/sbfFileList.$$"
 zProg="lzop"
@@ -62,21 +26,73 @@ clobber="yes"
 rebuild="no"
 doRIN="yes"
 doCGG="yes"
-doOff="yes"
-doGEO="yes"
-doStat="yes"
-doDOP="yes"
+dooffset="yes"
+dopvtGeo="yes"
+dorxStat="yes"
+dodop="yes"
 doGLOtime="yes"
 doPVTSat="no"
 dryrun="no"
 doReport1="no" # GPS Performance Report (incomplete)
 do3day="yes" # additional 3-day combination RINEX files
 doDailyConsol="yes" # consolidate data into daily consolidata files
+century=20
+DEBUG=no
 
+# extra configuration
+function doConfig() {
 
-trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT 0
+  if [ ! -d "${resultsTopDir}" ]; then confErr=0; logMsg "ERROR: cannot find top dir: ${resultsTopDir}"; fi
+  if [ ! -d "${sbfTopDir}" ]; then confErr=0; logMsg "ERROR: cannot find SBF source dir: ${sbfTopDir}"; fi
+  if [ ! -d "${consolidateToolsDir}" ]; then confErr=0; logMsg "ERROR: cannot find consolidateToolsDir: ${consolidateToolsDir}"; fi
+  if [ ! -d "${consolidataDir}" ]; then confErr=0; logMsg "ERROR: cannot find consolidataDir : ${consolidataDir}"; fi
+
+  rinexTopDir="${resultsTopDir}/rinex"
+  rinexDir='${rinexTopDir}/${rxName}/${element}'
+  cggTopDir="${resultsTopDir}/cggtts"
+  cggParam="paramCGGTTS.dat"
+  if ! sbf2rinProg="$(which sbf2rin)"; then confErr=0 ; echo "ERROR: cannot find sbf2rin" 1>&2; fi
+  if ! rin2cggProg="$(which rin2cgg)"; then confErr=0 ; echo "ERROR: cannot find rin2cgg" 1>&2; fi
+  rinFileName='${id}${day}'
+  if ! sbf2offset="$(which sbf2PVTGeo.py)"; then confErr=0; echo "ERROR: cannot find sbf2PVTGeo.py" 1>&2; fi
+  offsetTopDir="${resultsTopDir}/xPPSOffsets"
+  offsetDir='${offsetTopDir}/${rxName}/${element}'
+  offsetFileName='xppsoffset.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  if ! sbf2pvtGeo="$(which sbf2PVTGeo.py)"; then confErr=0; echo "ERROR: cannot find sbf2PVTGeo.py" 1>&2; fi
+  pvtGeoTopDir="${resultsTopDir}/pvtGeodetic"
+  pvtGeoDir='${pvtGeoTopDir}/${rxName}/${element}'
+  pvtGeoFileName='pvtGeo.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  if ! sbf2rxStat="$(which sbf2status.py)"; then confErr=0; echo "ERROR: cannot find sbf2status.py" 1>&2; fi
+  rxStatTopDir="${resultsTopDir}/rxStatus"
+  rxStatDir='${rxStatTopDir}/${rxName}/${element}'
+  rxStatFileName='rxStatus.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  if ! sbf2dop="$(which sbf2dop.py)"; then confErr=0; echo "ERROR: cannot find sbf2dop.py" 1>&2; fi
+  dopTopDir="${resultsTopDir}/rxDOP"
+  dopDir='${dopTopDir}/${rxName}/${element}'
+  dopFileName='rxDOP.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  if ! sbf2GLOtime="$(which sbf2GLOtime.py)"; then confErr=0; echo "ERROR: cannot find sbf2GLOtime.py" 1>&2; fi
+  GLOtimeTopDir="${resultsTopDir}/GLOtime"
+  GLOtimeDir='${GLOtimeTopDir}/${rxName}/${element}'
+  GLOtimeFileName='GLOtime.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  #sbf2PVTSat="/home/pdestefa/local/src/samples/sbf2PVTSat.py"
+  if ! sbf2PVTSat="$(which sbf2PVTSat.py)"; then confErr=0; echo "ERROR: cannot find sbf2PVTSat.py" 1>&2; fi
+  PVTSatTopDir="${resultsTopDir}/pvtSatCart"
+  PVTSatDir='${PVTSatTopDir}/${rxName}/${element}'
+  PVTSatFileName='pvtSat.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  #reportProg="/usr/local/RxTools/bin/sbfanalyzer"
+  if ! reportProg="$(which sbfanalyzer)"; then confErr=0; echo "ERROR: cannot find sbfanalyzer" 1>&2; fi
+  report1TopDir="${resultsTopDir}/sbfReport-GPSPerf"
+  report1Dir='${report1TopDir}/${rxName}/${element}'
+  report1Template='~pdestefa/local/src/samples/t2k.PPperformance.ppl'
+  report1FileName='gpsPerf.${id}.${typ}.yr${yr}.day${day}.part${part}.pdf'
+  if ! gpstk="$(which gpstk)"; then confErr=0; echo "ERROR: cannot find gpstk" 1>&2; fi
+
+  # bail if something was flagged
+  if [ ${confErr} ]; then logMsg "ERROR: configuration error, quiting"; exit 1; fi
+}
 
 function logMsg() {
+    if [[ no == ${DEBUG} && ${1} =~ ^DEBUG ]]; then return 1; fi
     echo "$@" 1>&2
 }
 
@@ -133,13 +149,31 @@ function getSBF() {
 
 }
 
+function fakeTime() {
+  # fake the modification time of a file
+  local file="${1}"
+  local refFile="${2}"
+
+  logMsg "DEBUG: reference file time: "$(date --reference="${refFile}")
+  touch -m --reference="${refFile}" "${file}" >/dev/null 2>&1
+  logMsg "DEBUG: new file time:"$(date --reference=${file})
+}
+function nudgeTime() {
+  # move the modification time of a file forward one minute
+  local file="${1}"
+  local oldTime=$(date --reference="${file}")
+  logMsg "DEBUG: old file time: ${oldTime}"
+  touch -m --date="${oldTime} + 1 minute" "${file}" >/dev/null 2>&1
+  logMsg "DEBUG: new file time:"$(date --reference=${file})
+}
+
 function mkRin() {
     local sbf=${1}
     local rin=${2}
 
     if [[ ! "yes" = ${doRIN} ]]; then logMsg "NOTICE: skipping RINEX production."; return 0; fi
 
-    if [ -z "${rin}" ]; then logMsg ERROR: need output name for RINEX data; exit 1; fi
+    if [ -z "${rin}" ]; then logMsg "ERROR: need output name for RINEX data"; exit 1; fi
     logMsg "NOTICE: processing SBF data into RINEX files..."
 
     ${sbf2rinProg} -v -f "${sbf}" -o "${rin}" -R210 >/dev/null 2>${rin}.log
@@ -229,129 +263,43 @@ function mkCGG() {
     rm ${rmList}
 }
 
-function mkOffset() {
-  local sbfFile="${1}"
-  local id=${2}
-  local rxName=$( getRxName "${id}" ${yr} ${day} )
-  local element=${3}
-  local typ=${4}
-  local yr=${5}
-  local day=${6}
-  local part=${7}
+# puts extracted data into the final archive location
+function storeData() {
+  local dataFile="${1}"
+  local logFile="${2}"
+  local sbfFile="${3}"
+  local archiveFullName="${4}"
 
-  if [[ ! "yes" = ${doOff} ]]; then logMsg "NOTICE: skipping xPPSOffset production."; return 0; fi
-  logMsg "NOTICE: extracting xPPSOffset data"
-  eval local offsetfile="${offsetFileName}"
-  offsetfile="$( echo ${offsetfile} | sed 's/\.part0//')"
-  local errfile="${offsetfile%%dat}log"
-  logMsg "DEBUG: outfile=${offsetfile} errfile=${errfile}"
-  /usr/local/bin/python2.7 "${sbf2offsetProg}" "${sbfFile}" >"${offsetfile}" 2>"${errfile}"
-  eval local offsetFinalDir="${offsetDir}"
-  if [[ ! -d ${offsetFinalDir} ]]; then mkdir --parents ${offsetFinalDir}; fi
-  logMsg "DEBUG: moving offset data to ${offsetFinalDir}/${offsetfile}.${zExt}"
-  if [[ "yes" = "${clobber}" || ! -e ${offsetFinalDir}/${offsetfile}.${zExt} ]]; then {
-    ${zProg} -c "${offsetfile}" >${offsetfile}.${zExt}
-    mv  "${offsetfile}.${zExt}" "${offsetFinalDir}"/.
-    ${zProg} -c "${errfile}" >${errfile}.${zExt}
-    mv  "${errfile}.${zExt}" "${offsetFinalDir}"/.
-  } else {
-    logMsg "WARNING: Refused to overwrite ${offsetFinalDir}/${offsetfile}.${zExt}.  (--noclobber used)"
+  local finalDir=$(dirname "${archiveFullName}")  # deduce directory
+  if [[ -e ${finalDir}/${dataFile}.${zExt} && "no" == "${clobber}" ]]; then {
+    # clobber disabled, but file exists, bail
+    logMsg "WARNING: Refused to overwrite ${finalDir}/${dataFile}.${zExt}.  (--noclobber used)"
+    return 0
   } fi
-  rm "${offsetfile}"
-  rm "${errfile}"
-}
 
-function mkPVTGeo() {
-  local sbfFile="${1}"
-  local id=${2}
-  local rxName=$( getRxName "${id}" ${yr} ${day} )
-  local element=${3}
-  local typ=${4}
-  local yr=${5}
-  local day=${6}
-  local part=${7}
-
-  if [[ ! "yes" = ${doGEO} ]]; then logMsg "NOTICE: skipping CGGTTS production."; return 0; fi
-  logMsg "NOTICE: extracting PVTGeodetic data"
-  eval local pvtGeoFile="${pvtGeoFileName}"
-  pvtGeoFile="$( echo ${pvtGeoFile} | sed 's/\.part0//')"
-  eval local pvtGeoFinalDir="${pvtGeoDir}"
-  local errfile="${pvtGeoFile%%dat}log"
-  logMsg "DEBUG: outfile=${pvtGeoFile} errfile=${errfile}"
-  /usr/local/bin/python2.7 "${sbf2pvtGeoProg}" "${sbfFile}" >"${pvtGeoFile}" 2>"${errfile}"
-  if [[ ! -d ${pvtGeoFinalDir} ]]; then mkdir --parents ${pvtGeoFinalDir}; fi
-  logMsg "DEBUG: moving PVTGeodetic data to ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt}"
-  if [[ "yes" = "${clobber}" || ! -e ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt} ]]; then {
-    ${zProg} -c "${pvtGeoFile}" >${pvtGeoFile}.${zExt}
-    mv  "${pvtGeoFile}.${zExt}" "${pvtGeoFinalDir}"/.
-    ${zProg} -c "${errfile}" >${errfile}.${zExt}
-    mv  "${errfile}.${zExt}" "${pvtGeoFinalDir}"/.
+  if [[ -e ${finalDir}/${dataFile}.${zExt} ]]; then {
+    # file already exists in archive directory
+    # overwrite archive file
+    # but first, overload mtime, force extracted data to have mtime just
+    # a bit more advanced than the previously archived data file
+    fakeTime "${dataFile}" "${finalDir}/${dataFile}.${zExt}"  # set the same
+    nudgeTime "${dataFile}" # then nudge it
+    logMsg "DEBUG: archive exists, nudging extraction mtime: "$(date --reference="${dataFile}")
   } else {
-    logMsg "WARNING: Refused to overwrite ${pvtGeoFinalDir}/${pvtGeoFile}.${zExt}.  (--noclobber used)"
+    # new archive file
+    fakeTime "${dataFile}" "${sbfFile}" # force extracted data to have mtime of source
+    logMsg "DEBUG: new archive file, forced time of extraction: "$(date --reference="${dataFile}")
   } fi
-  rm "${pvtGeoFile}"
-  rm "${errfile}"
-}
 
-function mkRxSatus() {
-  local sbfFile="${1}"
-  local id=${2}
-  local rxName=$( getRxName "${id}" ${yr} ${day} )
-  local element=${3}
-  local typ=${4}
-  local yr=${5}
-  local day=${6}
-  local part=${7}
+  # compress file
+  ${zProg} "${dataFile}"
+  ${zProg} "${logFile}"
+  logMsg "DEBUG: forced time of compressed file: "$(date --reference="${dataFile}.${zExt}")
 
-  if [[ ! "yes" = ${doStat} ]]; then logMsg "NOTICE: skipping RxStatus production."; return 0; fi
-  logMsg "NOTICE: extracting RxStatus data"
-  eval local outfile="${rxStatFileName}"
-  outfile="$( echo ${outfile} | sed 's/\.part0//')"
-  eval local finalDir="${rxStatDir}"
-  local errfile="${outfile%%dat}log"
-  logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
-  /usr/local/bin/python2.7 "${sbf2statProg}" "${sbfFile}" >"${outfile}" 2>"${outfile%%dat}log"
   if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
-  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile}.${zExt} ]]; then {
-    ${zProg} -c "${outfile}" >${outfile}.${zExt}
-    mv  "${outfile}.${zExt}" "${finalDir}"/.
-  } else {
-    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.${zExt}.  (--noclobber used)"
-  } fi
-  rm "${outfile}"
-  rm "${errfile}"
-}
 
-function mkDOP() {
-  local sbfFile="${1}"
-  local id=${2}
-  local rxName=$( getRxName "${id}" ${yr} ${day} )
-  local element=${3}
-  local typ=${4}
-  local yr=${5}
-  local day=${6}
-  local part=${7}
-
-  if [[ ! "yes" = ${doDOP} ]]; then logMsg "NOTICE: skipping DOP production."; return 0; fi
-  logMsg "NOTICE: extracting DOP data"
-  eval local outfile="${dopFileName}"
-  outfile="$( echo ${outfile} | sed 's/\.part0//')"
-  eval local finalDir="${dopDir}"
-  local errfile="${outfile%%dat}log"
-  logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
-  /usr/local/bin/python2.7 "${sbf2dopProg}" "${sbfFile}" >"${outfile}" 2>"${errfile}"
-  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
-  logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
-  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile}.${zExt} ]]; then {
-    ${zProg} -c "${outfile}" >${outfile}.${zExt}
-    mv  "${outfile}.${zExt}" "${finalDir}"/.
-    ${zProg} -c "${errfile}" >${errfile}.${zExt}
-    mv  "${errfile}.${zExt}" "${finalDir}"/.
-  } else {
-    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.${zExt}.  (--noclobber used)"
-  } fi
-  rm "${outfile}"
-  rm "${errfile}"
+  mv  "${dataFile}.${zExt}" "${finalDir}"/.
+  mv  "${logFile}.${zExt}" "${finalDir}"/.
 }
 
 # generic extraction using given python script
@@ -383,19 +331,10 @@ function sbfExtract() {
   eval local finalDir="${!dirType}"
   logMsg "DEBUG: finalDir=${finalDir}"
   #exit 10 # DEBUG
-  /usr/local/bin/python2.7 "${extractProg}" "${sbfFile}" >"${outfile}" 2>"${errfile}"
-  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
-  logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
-  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile}.${zExt} ]]; then {
-    ${zProg} -c "${outfile}" >${outfile}.${zExt}
-    mv  "${outfile}.${zExt}" "${finalDir}"/.
-    ${zProg} -c "${errfile}" >${errfile}.${zExt}
-    mv  "${errfile}.${zExt}" "${finalDir}"/.
-  } else {
-    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.${zExt}.  (--noclobber used)"
-  } fi
-  rm "${outfile}"
-  rm "${errfile}"
+  python2.7 "${extractProg}" "${sbfFile}" >"${outfile}" 2>"${errfile}"
+  storeData "${outfile}" "${errfile}" "${sbfFile}" "${finalDir}/${outfile}"
+  [[ -e "${outfile}" ]] && rm "${outfile}"
+  [[ -e "${errfile}" ]] && rm "${errfile}"
   #exit 10 # DEBUG
 }
 
@@ -573,16 +512,16 @@ function processSBF() {
             } fi 
 
             # extract xPPSOffset data
-            mkOffset "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" offset
 
             # extract PVTGeodetic data
-            mkPVTGeo "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" pvtGeo
 
             # extract rxStatus data
-            mkRxSatus "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" rxStat
 
             # extract DOP data
-            mkDOP "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}"
+            sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" dop
 
             # extract GLOtime data
             sbfExtract "${currSBF}" "${id}" "${element}" "${typ}" "${yr}" "${day}" "${part}" GLOtime
@@ -664,21 +603,23 @@ function processSBF() {
 
 ## MAIN ##
 
-while [[ ${#} -gt 0 ]]; do {
+# parse command line options
+while [[ ${#} -gt 0 ]] 
+do
     case ${1} in 
-      allon|--allon  )        doRIN="yes";doCGG="yes";doOff="yes";doGEO="yes";doStat="yes";doDOP="yes";doGLOtime="yes"; doPVTSat="yes";do3day="yes"; shift;;
-      alloff|--alloff )       doRIN="no";doCGG="no";doOff="no";doGEO="no";doStat="no";doDOP="no";doGLOtime="no"; doPVTSat="no";do3day="no"; shift;;
+        allon|--allon  )        doRIN="yes";doCGG="yes";dooffset="yes";dopvtGeo="yes";dorxStat="yes";dodop="yes";doGLOtime="yes";doPVTSat="yes";do3day="yes"; shift;;
+        alloff|--alloff )       doRIN="no";doCGG="no";dooffset="no";dopvtGeo="no";dorxStat="no";dodop="no";doGLOtime="no";doPVTSat="no";do3day="no"; shift;;
 
         nocl*|noCL*|--nocl* )   clobber="no"; shift;;
         reb*|REB*|--reb* )      rebuild="yes"; shift;;
         rin*|RIN*|--rin* )      doRIN="yes"; shift;;
         cgg*|CGG*|--cgg* )      doCGG="yes"; doRIN="yes"; shift;;
-        off*|OFF*|--off* )      doOff="yes"; shift;;
-        xpps*|XPPS*|--xpps* )   doOff="yes"; shift;;
-        xpps*|XPPS*|--xpps* )   doOff="yes"; shift;;
-        GEO*|GEO*|--geo* )      doGEO="yes"; shift;;
-        stat*|STAT*|--stat* )   doStat="yes"; shift;;
-        DOP*|DOP*|--dop* )      doDOP="yes"; shift;;
+        off*|OFF*|--off* )      dooffset="yes"; shift;;
+        xpps*|XPPS*|--xpps* )   dooffset="yes"; shift;;
+        xpps*|XPPS*|--xpps* )   dooffset="yes"; shift;;
+        geo*|GEO*|--geo* )      dopvtGeo="yes"; shift;;
+        stat*|STAT*|--stat* )   dorxStat="yes"; shift;;
+        DOP*|DOP*|--dop* )      dodop="yes"; shift;;
         GLO*|GLO*|--glo* )      doGLOtime="yes"; shift;;
         rep1|REP1|--rep1)       doReport1="yes"; shift;; 
         sats|SATS|--sats)       doPVTSat="yes"; shift;; # constellation breakdown
@@ -686,31 +627,51 @@ while [[ ${#} -gt 0 ]]; do {
 
         norin*|NORIN*|--norin* )      doRIN="no"; doCGG="no"; shift;;
         nocgg*|NOCGG*|--nocgg* )      doCGG="no"; shift;;
-        nooff*|NOOFF*|--nooff* )      doOff="no"; shift;;
-        noxpps*|NOXPPS*|--noxpps* )   doOff="no"; shift;;
-        noGEO*|NOGEO*|--nogeo* )      doGEO="no"; shift;;
-        nostat*|NOSTAT*|--nostat* )   doStat="no"; shift;;
-        noDOP*|NODOP*|--nodop* )      doDOP="no"; shift;;
+        nooff*|NOOFF*|--nooff* )      dooffset="no"; shift;;
+        noxpps*|NOXPPS*|--noxpps* )   dooffset="no"; shift;;
+        nogeo*|NOGEO*|--nogeo* )      dopvtGeo="no"; shift;;
+        nostat*|NOSTAT*|--nostat* )   dorxStat="no"; shift;;
+        noDOP*|NODOP*|--nodop* )      dodop="no"; shift;;
         noGLO*|NOGLO*|--noglo* )      doGLOtime="no"; shift;;
         norep1|NOREP1|--norep1)       doReport1="no"; shift;; #GPS Performance Report
         nosats|NOSATS|--nosats)       doPVTSat="no"; shift;; # constellation breakdown
         no3day|NO3DAY|--no3day)       do3day="no"; shift;; # 3-day combo RINEX files
 
+        --dir*|--top* )         shift; eval resultsTopDir=\"$(readlink -m "${1}")\"; shift;;
+        --sbf*|--sbfdir* )      shift; eval sbfTopDir=\"$(readlink -m "${1}")\"; shift;;
+
         dry*|--dry* )           dryrun="yes"; shift;;
+        debug*|--debug* )       DEBUG="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
         gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;
         *)                      erex=${1}; shift;;
     esac
-} done
+done
 
-#logMsg DEBUG: clobber = ${clobber}
-#logMsg DEBUG: erex = ${erex}
-#logMsg DEBUG: rebuild = ${rebuild}
+doConfig # configure extra things & do some checks
 
-renice 20 -p $$ >/dev/null 2>&1
+logMsg "DEBUG: DEBUG enabled"
+logMsg DEBUG: clobber = ${clobber}
+logMsg DEBUG: erex = ${erex}
+logMsg DEBUG: rebuild = ${rebuild}
+logMsg "DEBUG: resultsTopDir = ${resultsTopDir}"
+logMsg "DEBUG: sbfTopDir = ${sbfTopDir}"
 
-for id in ${recvList}; do {
+# use good temporary directory
+origWD="${PWD}"
+tmpDir=$(mktemp -d /tmp/mkRINEX.XXXXX)
+
+# trap exit for cleanup
+trapCmd="cd \"${origWD}\"; rm -rf \"${tmpDir}\""
+trap "${trapCmd}" EXIT 0
+logMsg "DEBUG: traps : " && trap -p
+
+cd "${tmpDir}"
+
+#exit 9 #DEBUG
+for id in ${recvList}
+do
     set -e 
     #logMsg DEBUG: $PWD
     processSBF ${id}
-} done
+done
