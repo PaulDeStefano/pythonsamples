@@ -101,6 +101,24 @@ function getSBF() {
 
 }
 
+function fakeTime() {
+  # fake the modification time of a file
+  local file="${1}"
+  local refFile="${2}"
+
+  logMsg "DEBUG: reference file time: "$(date --reference="${refFile}")
+  touch -m --reference="${refFile}" "${file}" >/dev/null 2>&1
+  logMsg "DEBUG: new file time:"$(date --reference=${file})
+}
+function nudgeTime() {
+  # move the modification time of a file forward one minute
+  local file="${1}"
+  local oldTime=$(date --reference="${file}")
+  logMsg "DEBUG: old file time: ${oldTime}"
+  touch -m --date="${oldTime} + 1 minute" "${file}" >/dev/null 2>&1
+  logMsg "DEBUG: new file time:"$(date --reference=${file})
+}
+
 function mkRin() {
     local sbf=${1}
     local rin=${2}
@@ -325,6 +343,46 @@ function mkDOP() {
   rm "${errfile}"
 }
 
+# puts extracted data into the final archive location
+function storeData() {
+  local dataFile="${1}"
+  local logFile="${2}"
+  local sbfFile="${3}"
+  local archiveFullName="${4}"
+
+  local finalDir=$(dirname "${archiveFullName}")  # deduce directory
+  if [[ -e ${finalDir}/${dataFile}.${zExt} && "no" == "${clobber}" ]]; then {
+    # clobber disabled, but file exists, bail
+    logMsg "WARNING: Refused to overwrite ${finalDir}/${dataFile}.${zExt}.  (--noclobber used)"
+    return 0
+  } fi
+
+  if [[ -e ${finalDir}/${dataFile}.${zExt} ]]; then {
+    # file already exists in archive directory
+    # overwrite archive file
+    # but first, overload mtime, force extracted data to have mtime just
+    # a bit more advanced than the previously archived data file
+    fakeTime "${dataFile}" "${finalDir}/${dataFile}.${zExt}"  # set the same
+    nudgeTime "${dataFile}" # then nudge it
+    logMsg "DEBUG: forced time of extraction: "$(date --reference="${dataFile}")
+  } else {
+    # new archive file
+    fakeTime "${dataFile}" "${sbfFile}" # force extracted data to have mtime of source
+    logMsg "DEBUG: forced time of extraction: "$(date --reference="${dataFile}")
+  } fi
+
+  # compress file
+  ${zProg} "${dataFile}"
+  ${zProg} "${logFile}"
+  logMsg "DEBUG: forced time of compressed file: "$(date --reference="${dataFile}.${zExt}")
+
+  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
+  logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${dataFile}.${zExt}"
+
+  mv  "${dataFile}.${zExt}" "${finalDir}"/.
+  mv  "${logFile}.${zExt}" "${finalDir}"/.
+}
+
 function sbfExtract() {
   local sbfFile="${1}"
   local id=${2}
@@ -353,19 +411,10 @@ function sbfExtract() {
   eval local finalDir="${!dirType}"
   logMsg "DEBUG: finalDir=${finalDir}"
   #exit 10 # DEBUG
-  /usr/local/bin/python2.7 "${extractProg}" "${sbfFile}" >"${outfile}" 2>"${errfile}"
-  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
-  logMsg "DEBUG: moving PVTGeodetic data to ${finalDir}/${outfile}.${zExt}"
-  if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile}.${zExt} ]]; then {
-    ${zProg} -c "${outfile}" >${outfile}.${zExt}
-    mv  "${outfile}.${zExt}" "${finalDir}"/.
-    ${zProg} -c "${errfile}" >${errfile}.${zExt}
-    mv  "${errfile}.${zExt}" "${finalDir}"/.
-  } else {
-    logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.${zExt}.  (--noclobber used)"
-  } fi
-  rm "${outfile}"
-  rm "${errfile}"
+  python2.7 "${extractProg}" "${sbfFile}" >"${outfile}" 2>"${errfile}"
+  storeData "${outfile}" "${errfile}" "${sbfFile}" "${finalDir}/${outfile}"
+  [[ -e "${outfile}" ]] && rm "${outfile}"
+  [[ -e "${errfile}" ]] && rm "${errfile}"
   #exit 10 # DEBUG
 }
 
