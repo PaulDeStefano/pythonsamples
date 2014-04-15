@@ -49,10 +49,13 @@ ND280:${commonRoot}/${typeDir}/ND280SeptentrioGPS-TOKA
 Trav:${commonRoot}/${typeDir}/TravSeptentrioGPS-PT04
 "
 daqFileNameExp='*pvtGeo*.dat.*'
+daqFileExclude='^ISO'
 tmpDir=$(mktemp -d '/tmp/ptMon-tmp.XXXXX')
 fileList=${tmpDir}/ptMon-filelist.$$
 unixTimeColumn=2
 dataColumn=9
+useCSV="CSV"
+
 GNUPLOT_LIB=${GNUPLOT_LIB}:/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
 origWD=${PWD}
 
@@ -77,8 +80,14 @@ function getLeastFiles()
     # go through each file in reverse chronological order.  Stop on the newest
     # file that preceeds the start time.  Note all files between then and now.
 
-    local fileStartTime=$( head -n 3 ${daqFile} | tail -n -1 | awk '{print $'${col}'}' )
-    #logMsg "DEBUG: file start time: ${fileStartTime}"
+    #local fileStartTime=$( head -n 3 ${daqFile} | tail -n -1 | awk '{print $'${col}'}' )
+    local fileStartTime=
+    if [ ${useCSV} == "CSV" ]; then {
+      fileStartTime=$( head -n 3 ${daqFile} | tail -n 1 | awk -F',' '{print $'${col}'}' )
+    } else {
+      fileStartTime=$( head -n 3 ${daqFile} | tail -n 1 | awk '{print $'${col}'}' )
+    } fi
+    logMsg "DEBUG: file start time: ${fileStartTime}"
     if [[ -z ${fileStartTime} ]]; then {
       logMsg "ERROR: cannot find start time in DAQ file: ${daqFile}"; exit 1
     } fi
@@ -107,6 +116,27 @@ function getLeastFiles()
   logMsg "NOTICE: ...done."
 }
 
+function getLeastFilesByName()
+{
+  # reduce files by name conventions
+  local fileList=$1       # ordered list of files to check
+  local startTime=$2      # oldest value to search for
+
+  local startDay=$(date --date="@${startTime}" +%j)
+  local startYear=$(date --date="@${startTime}" +%y)
+
+  local newFileList="${tmpDir}/newList.$$"
+  for file in $( cat ${fileList} ); do {
+    local fileYear=$( echo "${file}" | sed -r 's/.*yr(..).*/\1/' )
+    local fileDay=$( echo "${file}" |  sed -r 's/.*day(..).*/\1/' )
+    if [[ ${fileDay} -ge ${startDay} && ${fileYear} -eq ${startYear} ]]; then {
+      echo "${file}" >> "${newFileList}"
+    } fi
+
+  } done
+
+}
+
 function getDAQFileList() {
   # file DAQ files for the specified site, store in specified file
   local siteName=$1
@@ -122,12 +152,13 @@ function getDAQFileList() {
   } done
   #logMsg "DEBUG: data dir: ${dir}"
   if [ ! -d "${dir}" ]; then {
-    logMsg "WARNING: can't find dir: ${dir}, trying original working dir: ${origWD}"
+    logMsg "WARNING: cannot find dir: ${dir}, trying original working dir: ${origWD}"
     dir=${origWD}
   } fi
 
   # find DAQ files in the directory
-  ls -t $( find ${dir} -name "${daqFileNameExp}" -type f -mtime ${mtimeSpec} ) > ${file}
+  #ls -t $( find ${dir} -name "${daqFileNameExp}" -type f -mtime ${mtimeSpec} ) > ${file}
+  find ${dir} -name "${daqFileNameExp}" -type f -mtime ${mtimeSpec} | sort > ${file}
 }
 
 function deCompress() {
@@ -154,7 +185,8 @@ function deCompress() {
     esac
 
     logMsg "DEBUG: decompressing: ${file} -> ${outFile} ..."
-    eval ${cmd} > "${outFile}"
+    eval ${cmd} | egrep -v "${daqFileExclude}" > "${outFile}"
+    logMsg "DEBUG: head of file: $(head -n 1 ${outFile})"
     if [ ${?} -ge 1 ]; then logMsg "ERROR: unable to decompress file: ${file}"; exit 1; fi
     logMsg "DEBUG: ...done."
 
@@ -184,23 +216,28 @@ function mkPlots()
   } fi
   # get the UNIXtime 48 hours before right now, UTC
   local startTime=$( date --date="${dateSpec}" --utc +%s )
-  # pair down the list of files by datestamps inside the files
-  getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
+  local endTime=$( date --date="00:00 today" --utc +%s )
+  # reduce file list using naming rules
+  getLeastFilesByName ${fileList} ${startTime}
   deCompress ${fileList}
+  # pair down the list of files by datestamps inside the files
+  #getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
   local filesToPlot=$( cat ${fileList} )
 
   local pltTitle="Precise Time GPS Receiver Satellites in PVT (at ${site}): ${dateSpec}"
   local style="points pointtype 2 linewidth 1 linecolor 2"
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
-  local gptCmds='startTime="'${startTime}'";'
+  local gptCmds=''
+  gptCmds=${gptCmds}'startTime="'${startTime}'";'
+  gptCmds=${gptCmds}'endTime="'${endTime}'";'
   gptCmds=${gptCmds}'outFile="'${tmpDir}/outfile'";'
   gptCmds=${gptCmds}'pltCmd="'${unixTimeColumn}':'${dataColumn}'";'
   gptCmds=${gptCmds}'pltTitle="'${pltTitle}'";'
   gptCmds=${gptCmds}'fileList="'${filesToPlot}'";'
   gptCmds=${gptCmds}'styleExt="'${style}'";'
   gptCmds=${gptCmds}'set yrange [ 0 : 20 ];'
-  gptCmds=${gptCmds}'call "pt-plotgen.gpt" "CSV";'
+  gptCmds=${gptCmds}'call "pt-plotgen.gpt" "'${useCSV}'";'
   #logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   logMsg "NOTICE: making plots: ${site}: ${dateSpec}"
   #eval ${pltProg} -e "${gptCmds}" pt-plotgen.gpt
@@ -221,9 +258,9 @@ if [ ! -e ${pltProg} ]; then logMsg "ERROR: cannot find gnuplot in PATH"; exit 1
 
 pltType="pvtGeo"
 # last 48 hours
-mkPlots "-3" "now - 48 hours" "${siteName}"
-mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.${pltType}.48hours.png
-mkPlots "-8" "today - 7 days" "${siteName}"
+mkPlots "-3" "00:00 2 days ago" "${siteName}"
+mv "${tmpDir}/outfile.png" "${outputDir}/ptMon.${siteName}.${pltType}.48hours.png"
+mkPlots "-8" "00:00 7 days ago" "${siteName}"
 mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.${pltType}.8days.png
-mkPlots "-31" "today - 30 days" "${siteName}"
+mkPlots "-31" "00:00 30 days ago" "${siteName}"
 mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.${pltType}.30days.png
