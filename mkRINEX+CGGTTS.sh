@@ -1,10 +1,14 @@
 #!/bin/bash
 
+# force nice value of 19
+renice 19 -p $$ >/dev/null 2>&1
 
-#sbfTopDir="/home/t2k/public_html/post/gpsgroup/ptdata"
+# DEFAULT configuration values
+confErr=""
 sbfTopDir="/data-scratch"
-#resultsTopDir="./testTopDir"
+#sbfTopDir="/home/t2k/public_html/post/gpsgroup/ptdata"
 resultsTopDir="/home/t2k/public_html/post/gpsgroup/ptdata/organizedData"
+#resultsTopDir="./testTopDir"
 recvList="PT00 PT01 TOKA PT04"
 #recvNiceName[PT00]="NU1SeptentrioGPS-PT00"
 #recvNiceName[PT01]="RnHutSeptentrioGPS-PT01"
@@ -15,33 +19,7 @@ PT01:KenkyutoSeptentrioGPS-PT01
 TOKA:NM-ND280SeptentrioGPS-TOKA
 PT04:TravelerGPS-PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
-rinexTopDir="${resultsTopDir}/rinex"
-rinexDir='${rinexTopDir}/${rxName}/${element}'
-cggTopDir="${resultsTopDir}/cggtts"
-cggParam="paramCGGTTS.dat"
-sbf2rinProg="/usr/local/RxTools/bin/sbf2rin"
-rin2cggProg="/usr/local/RxTools/bin/rin2cgg"
-rinFileName='${id}${day}'
-sbf2offsetProg="/home/pdestefa/local/src/samples/sbf2offset.py"
-offsetTopDir="${resultsTopDir}/xPPSOffsets"
-offsetDir='${offsetTopDir}/${rxName}/${element}'
-offsetFileName='xppsoffset.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbf2pvtGeoProg="/home/pdestefa/local/src/samples/sbf2PVTGeo.py"
-pvtGeoTopDir="${resultsTopDir}/pvtGeodetic"
-pvtGeoDir='${pvtGeoTopDir}/${rxName}/${element}'
-pvtGeoFileName='pvtGeo.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbf2statProg="/home/pdestefa/local/src/samples/sbf2status.py"
-rxStatTopDir="${resultsTopDir}/rxStatus"
-rxStatDir='${rxStatTopDir}/${rxName}/${element}'
-rxStatFileName='rxStatus.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbf2dopProg="/home/pdestefa/local/src/samples/sbf2dop.py"
-dopTopDir="${resultsTopDir}/rxDOP"
-dopDir='${dopTopDir}/${rxName}/${element}'
-dopFileName='rxDOP.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
-sbf2GLOtime="/home/pdestefa/local/src/samples/sbf2GLOtime.py"
-GLOtimeTopDir="${resultsTopDir}/GLOtime"
-GLOtimeDir='${GLOtimeTopDir}/${rxName}/${element}'
-GLOtimeFileName='GLOtime.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+
 sbfFileList="/tmp/sbfFileList.$$"
 zProg="lzop"
 zExt="lzo"
@@ -56,15 +34,48 @@ dorxStat="yes"
 dodop="yes"
 doGLOtime="yes"
 dryrun="no"
+DEBUG=no
 
-origWD="${PWD}"
-tmpDir=$(mktemp -d /tmp/mkRINEX.XXXXX)
-cd "${tmpDir}"
+# extra configuration
+function doConfig() {
 
-#trap '[[ -e "${sbfFileList}" ]] && rm "${sbfFileList}"' EXIT 0
-trap 'cd "${origWD}"; rm -rf "${tmpDir}"' EXIT 0
+  if [ ! -d "${resultsTopDir}" ]; then confErr=0; logMsg "ERROR: cannot find top dir: ${resultsTopDir}"; fi
+  if [ ! -d "${sbfTopDir}" ]; then confErr=0; logMsg "ERROR: cannot find SBF source dir: ${sbfTopDir}"; fi
+
+  rinexTopDir="${resultsTopDir}/rinex"
+  rinexDir='${rinexTopDir}/${rxName}/${element}'
+  cggTopDir="${resultsTopDir}/cggtts"
+  cggParam="paramCGGTTS.dat"
+  if ! sbf2rinProg="$(which sbf2rin)"; then confErr=0 ; echo "ERROR: cannot find sbf2rin" 1>&2; fi
+  if ! rin2cggProg="$(which rin2cgg)"; then confErr=0 ; echo "ERROR: cannot find rin2cgg" 1>&2; fi
+  rinFileName='${id}${day}'
+  if ! sbf2offset="$(which sbf2PVTGeo.py)"; then confErr=0; echo "ERROR: cannot find sbf2PVTGeo.py" 1>&2; fi
+  offsetTopDir="${resultsTopDir}/xPPSOffsets"
+  offsetDir='${offsetTopDir}/${rxName}/${element}'
+  offsetFileName='xppsoffset.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  if ! sbf2pvtGeo="$(which sbf2PVTGeo.py)"; then confErr=0; echo "ERROR: cannot find sbf2PVTGeo.py" 1>&2; fi
+  pvtGeoTopDir="${resultsTopDir}/pvtGeodetic"
+  pvtGeoDir='${pvtGeoTopDir}/${rxName}/${element}'
+  pvtGeoFileName='pvtGeo.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  if ! sbf2rxStat="$(which sbf2status.py)"; then confErr=0; echo "ERROR: cannot find sbf2status.py" 1>&2; fi
+  rxStatTopDir="${resultsTopDir}/rxStatus"
+  rxStatDir='${rxStatTopDir}/${rxName}/${element}'
+  rxStatFileName='rxStatus.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  if ! sbf2dop="$(which sbf2dop.py)"; then confErr=0; echo "ERROR: cannot find sbf2dop.py" 1>&2; fi
+  dopTopDir="${resultsTopDir}/rxDOP"
+  dopDir='${dopTopDir}/${rxName}/${element}'
+  dopFileName='rxDOP.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+  if ! sbf2GLOtime="$(which sbf2GLOtime.py)"; then confErr=0; echo "ERROR: cannot find sbf2GLOtime.py" 1>&2; fi
+  GLOtimeTopDir="${resultsTopDir}/GLOtime"
+  GLOtimeDir='${GLOtimeTopDir}/${rxName}/${element}'
+  GLOtimeFileName='GLOtime.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
+
+  # bail if something was flagged
+  if [ ${confErr} ]; then logMsg "ERROR: configuration error, quiting"; exit 1; fi
+}
 
 function logMsg() {
+    if [[ no == ${DEBUG} && ${1} =~ ^DEBUG ]]; then return 1; fi
     echo "$@" 1>&2
 }
 
@@ -237,11 +248,11 @@ function storeData() {
     # a bit more advanced than the previously archived data file
     fakeTime "${dataFile}" "${finalDir}/${dataFile}.${zExt}"  # set the same
     nudgeTime "${dataFile}" # then nudge it
-    logMsg "DEBUG: forced time of extraction: "$(date --reference="${dataFile}")
+    logMsg "DEBUG: archive exists, nudging extraction mtime: "$(date --reference="${dataFile}")
   } else {
     # new archive file
     fakeTime "${dataFile}" "${sbfFile}" # force extracted data to have mtime of source
-    logMsg "DEBUG: forced time of extraction: "$(date --reference="${dataFile}")
+    logMsg "DEBUG: new archive file, forced time of extraction: "$(date --reference="${dataFile}")
   } fi
 
   # compress file
@@ -412,7 +423,9 @@ function processSBF() {
 
 ## MAIN ##
 
-while [[ ${#} -gt 0 ]]; do {
+# parse command line options
+while [[ ${#} -gt 0 ]] 
+do
     case ${1} in 
         allon|--allon  )              doRIN="yes";doCGG="yes";dooffset="yes";dopvtGeo="yes";dorxStat="yes";dodop="yes";doGLOtime="yes"; shift;;
         alloff|--alloff )             doRIN="no";doCGG="no";dooffset="no";dopvtGeo="no";dorxStat="no";dodop="no";doGLOtime="no"; shift;;
@@ -438,21 +451,41 @@ while [[ ${#} -gt 0 ]]; do {
         noDOP*|NODOP*|--nodop* )      dodop="no"; shift;;
         noGLO*|NOGLO*|--noglo* )      doGLOtime="no"; shift;;
 
+        --dir*|--top* )         shift; eval resultsTopDir=\"$(readlink -m "${1}")\"; shift;;
+        --sbf*|--sbfdir* )      shift; eval sbfTopDir=\"$(readlink -m "${1}")\"; shift;;
+
         dry*|--dry* )           dryrun="yes"; shift;;
+        debug*|--debug* )       DEBUG="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
         gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;
         *)                      erex=${1}; shift;;
     esac
-} done
+done
 
-#logMsg DEBUG: clobber = ${clobber}
-#logMsg DEBUG: erex = ${erex}
-#logMsg DEBUG: rebuild = ${rebuild}
+doConfig # configure extra things & do some checks
 
-renice 20 -p $$ >/dev/null 2>&1
+logMsg "DEBUG: DEBUG enabled"
+logMsg DEBUG: clobber = ${clobber}
+logMsg DEBUG: erex = ${erex}
+logMsg DEBUG: rebuild = ${rebuild}
+logMsg "DEBUG: resultsTopDir = ${resultsTopDir}"
+logMsg "DEBUG: sbfTopDir = ${sbfTopDir}"
 
-for id in ${recvList}; do {
+# use good temporary directory
+origWD="${PWD}"
+tmpDir=$(mktemp -d /tmp/mkRINEX.XXXXX)
+
+# trap exit for cleanup
+trapCmd="cd \"${origWD}\"; rm -rf \"${tmpDir}\""
+trap "${trapCmd}" EXIT 0
+logMsg "DEBUG: traps : " && trap -p
+
+cd "${tmpDir}"
+
+#exit 9 #DEBUG
+for id in ${recvList}
+do
     set -e 
     #logMsg DEBUG: $PWD
     processSBF ${id}
-} done
+done
