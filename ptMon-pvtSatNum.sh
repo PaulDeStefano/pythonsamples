@@ -56,6 +56,7 @@ unixTimeColumn=2
 dataColumn=9
 useCSV="CSV"
 
+DEBUG=no
 GNUPLOT_LIB=${GNUPLOT_LIB}:/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
 origWD=${PWD}
 
@@ -63,7 +64,9 @@ origWD=${PWD}
 trap '[[ -d ${tmpDir} ]] && rm -rf "${tmpDir}" ' EXIT 0
 
 function logMsg() {
-echo "$@" 1>&2
+  # do not print DEBUG messages if DEBUG=no
+  [[ ${DEBUG} == no && ${1} =~ ^DEBUG: ]] && return 0
+  echo "$@" 1>&2
 }
 
 function getLeastFiles()
@@ -129,7 +132,7 @@ function getLeastFilesByName()
   for file in $( cat ${fileList} ); do {
     local fileYear=$( echo "${file}" | sed -r 's/.*yr(..).*/\1/' )
     local fileDay=$( echo "${file}" |  sed -r 's/.*day(..).*/\1/' )
-    if [[ ${fileDay} -ge ${startDay} && ${fileYear} -eq ${startYear} ]]; then {
+    if expr ${fileDay} '>=' ${startDay} && ${fileYear} -eq ${startYear} ; then {
       echo "${file}" >> "${newFileList}"
     } fi
 
