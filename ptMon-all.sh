@@ -41,6 +41,8 @@ if [ -z "${cycle}" ]; then echo "ERROR: parameter #2 required, cycle type" 1>&2;
 if [ -z "${outputTopDir}" ]; then echo "ERROR: parameter #1 required, output directory" 1>&2; exit 1; fi
 if [ ! -d "${outputTopDir}" ]; then echo "ERROR: cannot find log directory: ${outputTopDir}" 1>&2; exit 1; fi
 
+if ! which ptMon-pltDAQ.sh >/dev/null 2>&1 ; then echo "ERROR: cannot find ptMon-pltDAQ.sh" 1>&2; exit 1; fi
+
 function mkDAQplots() {
 
   # make "live" DAQ (raw, uncorrected PT-OT) plots

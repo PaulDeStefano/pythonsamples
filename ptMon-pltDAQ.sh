@@ -156,7 +156,7 @@ function mkPlots()
   #gptCmds=${gptCmds}'styleExt="'${styleName}'"'
   #logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${site}:${dateSpec}"
-  /usr/local/bin/gnuplot -e "${gptCmds}" ${GNUPLOT_LIB}/pt-plotgen.gpt
+  gnuplot -e "${gptCmds}" ${GNUPLOT_LIB}/pt-plotgen.gpt
   #gnuplot -e 'startTime="'${startTime}'";outFile="'${tmpDir}'";pltCmd="using '${unixTimeColumn}':$('${dataColumn}'*10**9)";pltTitle="test title";fileList="'$file'"' gnuplot.d/pt-plotgen.gpt
   logMsg "NOTICE: $(date --rfc-3339=seconds): ...done"
 
@@ -186,6 +186,7 @@ if [ -z "${cycle}" ]; then logMsg "ERROR: third parameter, cycle, required but m
 if [ -z "${siteName}" ]; then logMsg "ERROR: second parameter, site name, required but missing."; exit 1; fi
 if [ -z "${outputDir}" ]; then logMsg "ERROR: first parameter, output directory, required but missing."; exit 1; fi
 if [ ! -d "${outputDir}" ]; then logMsg "ERROR: cannot find output directory: ${outputDir}"; exit 1; fi
+if ! which gnuplot >/dev/null 2>&1 ; then logMsg "ERROR: cannot find gnuplot"; exit 1; fi
 
 loadAvg=$(uptime | awk '{print $(NF-2)}' |sed 's/,//')
 if echo ${loadAvg} ${loadAvgLimit} | awk 'END { exit ( ! ($1 >= $2) ) }' ; then {
