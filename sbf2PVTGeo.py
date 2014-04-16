@@ -147,6 +147,9 @@ TOW = number of miliseconds since start of the current week
 phi = Phi angle measurement, Geodetic coordinates
 lmbd = Lambda angle measurement, Geodetic coordinates
 h = height above Geodetic datum surface 
+RxClkBias = Measured time difference (ns) between internal clock (and external Freq Source) and Time System Time
+RxClkDrift = Calculated error in frequncy of internal clock (and ext. FS)
+# of Satellites in PVT
 '''
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')

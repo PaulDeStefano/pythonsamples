@@ -1,7 +1,7 @@
 #!/usr/local/bin/python2.7
 """ sbf2offset.py
     Reads SBF binary data files and produces plain text file
-    containing ReceiverStatus data
+    containing GLOTime data
 
     Copyright (C) 2013 Paul R. DeStefano
 
@@ -94,15 +94,25 @@ def doStuff(f) :
     #print('do stuff on file '+f+'...\n')
     with open(f,'r') as sbf_fobj:
       #for blockName, block in pysbf.load(sbf_fobj, blocknames={'xPPSOffset'},limit=10):
-      for blockName, block in pysbf.load(sbf_fobj, blocknames={'ReceiverStatus_v2'}):
+      for blockName, block in pysbf.load(sbf_fobj, blocknames={'PVTSatCartesian'}):
         WNc=block['WNc']
         TOW=block['TOW']
-        CPULoad=block['CPULoad']
-        extError=block['ExtError']
-        upTime=block['UpTime']
-        rxState=block['RxState']
-        rxError=block['RxError']
-
+        nblk=block['N'] # number of satellites in this block
+        #print(block.keys())
+        satPos=block['SatPos']
+        #print(type(satPos))
+        nGPS=nGLO=nGAL=0
+        for e in satPos:
+            #print(type(e))
+            #print(e.keys())
+            svid=e['SVID']
+            #print(svid)
+            if (svid >= 1 and svid <= 31) :
+                nGPS+=1
+            if svid >= 38 and svid <= 62 :
+                nGLO+=1
+            if svid >= 71 and svid <= 102 :
+                nGAL+=1
         timeSystem=0 # assume this is GNSS time
         try:
             rcvrTime = t2kSeptPVTTime(WNc,TOW,timeSystem)
@@ -110,40 +120,38 @@ def doStuff(f) :
             stderr.write(str(e)+', skipping block (WNc={},TOW={},NrSV={},SignalInfo={},AlertFlag={})'.format(errCode,WNc,TOW,nrSV,signalInfo,alertFlag )+'\n')
             continue
         iso8601, unixtime, WNc, TOW, jd, mjd, dayOfYear = rcvrTime.getTuple()
-        print("{},{},{},{},{},{},{},{},{},{},{},{}".format(
+        print("{},{},{},{},{},{},{},".format(
                 iso8601, unixtime,
-                WNc, TOW, jd, mjd, dayOfYear,
-                CPULoad,
-                extError,
-                upTime,
-                rxState,rxError
+                WNc, TOW, jd, mjd, dayOfYear) +
+                "{},{},{},{}".format(
+                nblk,nGPS,nGLO,nGAL
                 ) )
 
 if __name__ == "__main__" :
-    #print('hi\n')
-    #print(sys.argv)
-    headerText='ISO_Date,UNIX_time,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,CPULoad,ExtError,UpTime,RxState,RxError'
+    headerText='ISO_Date,UNIX_time,WNc,TOW,julianDay,modifiedJulianDay,dayOfYear,nblk,nGPS,nGLO,nGAL'
+    epilog="\
+This program reads the files given on the command line.  They must be binary\n\
+SBF formated files.  It locates any and all GLOTime blocks and prints the\n\
+ISO8601 date, UNIX time, and other data from each block.\n\
+\n\
+output format:\n\
+{}\n\
+\n\
+For validation purposes, the output data also includes the GNSS Week Number\n\
+(WNc) and Time of Week (TOW).\n\
+\n\
+WNc = number of weeks since GNSS epoch time (Jan 1 1980)\n\
+TOW = number of miliseconds since start of the current week\n\
+nblk = number of blocks\n\
+nGPS = number of GPS satellites in PVT\n\
+nGLO = number of GLONASS satellites in PVT\n\
+nGAL = number of GALLILEO satellites in PVT\n\
+".format(headerText)
+
     parser = argparse.ArgumentParser(
             formatter_class=argparse.RawDescriptionHelpFormatter
-            ,description='Prints all Receiver Status values it finds in given files.'
-            ,epilog='''
-This program reads the files given on the command line.  They must be binary
-SBF formated files.  It locates any and all Receiver Status blocks and prints the
-ISO8601 date, and UNIX time, & other data from each block.
-
-output format:
-<isoDate>,<UNIXtime>,WNc,TOW,JulianDay,MJD,dayOfYear,CPULoad,ExtError,UpTime,RxState,RxError
-
-For validation purposes, the output data also includes the GNSS Week Number
-(WNc) and Time of Week (TOW).
-
-(See SBF Reference Guid, ReveiverSatus (v2) Block)
-CPULoad = Load on Receiver processor
-ExtError = BitField reportiner external errors
-UpTime = Number of seconds elapsed since the start-up of the receiver, or since the last reset
-RxState = Bit Field indicating the status of key components of the receiver
-RxError = Bit Field indicating whether an error occured previously.
-'''
+            ,description='Prints all GLOTime values it finds in given files.'
+            ,epilog=epilog
             )
     parser.add_argument('fileList',help='Positional arguments are assumed to be input filenames',nargs='+')
     #parser.add_argument('--outfile',nargs='?',help='output file')
