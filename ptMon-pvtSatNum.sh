@@ -3,7 +3,7 @@
 #
 #          FILE:  ptMon-pvtSatNum.sh
 # 
-#         USAGE:  ./ptMon-pltDAQ.sh <outputDir> NU1|Super-K|Trav|ND280  
+#         USAGE:  ./ptMon-pvtSatNum.sh <outputDir> NU1|Super-K|Trav|ND280 live|daily|weekly
 # 
 #   DESCRIPTION:  plot raw live DAQ data
 # 
@@ -43,8 +43,8 @@ renice 20 -p ${$} >/dev/null
 
 # Mapping from PT site installation names to data directories
 commonRoot=/home/t2k/public_html/post/gpsgroup/ptdata/organizedData
-typeDir=pvtGeo
-siteList="NU1:${commonRoot}/${typeDir}/NU1Septentrio-PT00
+typeDir=pvtGeodetic
+siteList="NU1:${commonRoot}/${typeDir}/NU1SeptentrioGPS-PT00
 Super-K:${commonRoot}/${typeDir}/KenkyutoSeptentrioGPS-PT01
 ND280:${commonRoot}/${typeDir}/ND280SeptentrioGPS-TOKA
 Trav:${commonRoot}/${typeDir}/TravSeptentrioGPS-PT04
@@ -215,10 +215,10 @@ function mkPlots()
   #logMsg "DEBUG: " $(head -n 3 ${fileList})
   if [ -z "$(head -n 1 ${fileList})" ]; then {
     # no files, failure
-    logMsg "ERROR: unable to find any DAQ files in directory ${dir}, skipping"
+    logMsg "ERROR: unable to find any ${pltType} files in directory ${dir}, skipping"
     return 1
   } else {
-    logMsg "NOTICE: found DAQ files."
+    logMsg "NOTICE: found ${pltType} files."
   } fi
   # get the UNIXtime 48 hours before right now, UTC
   local startTime=$( date --date="${dateSpec}" --utc +%s )
