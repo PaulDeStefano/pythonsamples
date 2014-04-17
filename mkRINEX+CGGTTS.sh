@@ -5,6 +5,7 @@ renice 19 -p $$ >/dev/null 2>&1
 
 export LD_LIBRARY_PATH=/usr/local/gcc-4.7.1/lib # req for sbfanalyzer
 export DISPLAY='' # req for sbfanalyzer
+export TZ=UTC
 
 # DEFAULT configuration values
 confErr=""
@@ -14,7 +15,6 @@ resultsTopDir="/home/t2k/public_html/post/gpsgroup/ptdata/organizedData"
 #resultsTopDir="./testTopDir"
 recvList="PT00 PT01 TOKA PT04"
 pathGrps="GPSData_Internal GPSData_External ND280"
-gpstkbin=~gurfler/newgps/gpstk1.5/bin
 consolidateToolsDir=~gurfler/newgps/consolidata
 consolidataDir="/data-scratch/paul/consolidataTestDir"
 
@@ -37,6 +37,8 @@ doReport1="no" # GPS Performance Report (incomplete)
 do3day="yes" # additional 3-day combination RINEX files
 doDailyConsol="yes" # consolidate data into daily consolidata files
 century=20
+beginTime=
+endTime=
 DEBUG=no
 
 # extra configuration
@@ -85,7 +87,7 @@ function doConfig() {
   report1Dir='${report1TopDir}/${rxName}/${element}'
   report1Template='~pdestefa/local/src/samples/t2k.PPperformance.ppl'
   report1FileName='gpsPerf.${id}.${typ}.yr${yr}.day${day}.part${part}.pdf'
-  if ! gpstk="$(which gpstk)"; then confErr=0; echo "ERROR: cannot find gpstk" 1>&2; fi
+  if ! gpstkbin="$(dirname $(which EditRinex) )"; then confErr=0; echo "ERROR: cannot find gtstkbin" 1>&2; fi
 
   # bail if something was flagged
   if [ ${confErr} ]; then logMsg "ERROR: configuration error, quiting"; exit 1; fi
@@ -136,11 +138,23 @@ function getSBF() {
     local element=${1}
     local id=$2
     local extraRegex=${3}
+    local beginT=${4}
+    local endT=${5}
     logMsg "NOTICE: working on element ${element}"
+
+    # create comparison files for find
+    beginFile="${tmpDir}/beginFile"
+    endFile="${tmpDir}/endFile"
+    touch --date="@0" "${beginFile}" >/dev/null 2>&1
+    touch --date="tomorrow" "${endFile}" >/dev/null 2>&1
+    if [[ ! -z "${beginT}" ]]; then touch --date="${beginT}" "${beginFile}"; fi
+    if [[ ! -z "${endT}" ]]; then touch --date="${endT}" "${endFile}"; fi
 
     # find SBF files
     ( /usr/bin/find ${sbfTopDir}/sukrnh5/DATA ${sbfTopDir}/gpsptnu1/DATA ${sbfTopDir}/triptgsc/nd280data ${sbfTopDir}/traveller-box \
-        -type f -iwholename "*${element}*${id}*.??_*" \
+        -type f \
+        -iwholename "*${element}*${id}*.??_*" \
+        -newer "${beginFile}" -a \! -newer "${endFile}" \
         2>/dev/null \
         | egrep -i "${extraRegex}" \
         | fgrep -v /old/ \
@@ -475,7 +489,7 @@ function processSBF() {
         prevRINEX=""
         oldRINEX=""
 
-        getSBF ${element} ${id} ${erex} > "${sbfFileList}"
+        getSBF ${element} ${id} "${erex}" "${beginTime}" "${endTime}" > "${sbfFileList}"
         while read file; do {
             logMsg "NOTICE: working on SBF file: ${file}"
 
@@ -638,7 +652,12 @@ do
         no3day|NO3DAY|--no3day)       do3day="no"; shift;; # 3-day combo RINEX files
 
         --dir*|--top* )         shift; eval resultsTopDir=\"$(readlink -m "${1}")\"; shift;;
-        --sbf*|--sbfdir* )      shift; eval sbfTopDir=\"$(readlink -m "${1}")\"; shift;;
+        --sbf*)                 shift; eval sbfTopDir=\"$(readlink -m "${1}")\"; shift;;
+        --ctools*)              shift; eval consolidateToolsDir=\"$(readlink -m "${1}")\"; shift;;
+        --consol*)              shift; eval consolidataDir=\"$(readlink -m "${1}")\"; shift;;
+
+        --begin*)               shift; eval beginTime="$(date --date="${1}" --utc +%F)"; shift;;
+        --end*)                 shift; eval endTime="$(date --date="${1}" --utc +%F)"; shift;;
 
         dry*|--dry* )           dryrun="yes"; shift;;
         debug*|--debug* )       DEBUG="yes"; shift;;
