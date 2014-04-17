@@ -62,5 +62,25 @@ function mkDAQplots() {
   echo "...done: $?"
 }
 
+function mkSatPlots() {
+
+  # don't run live cycles for this data
+  if [[ ${cycle} == live ]]; then return 0; fi
+  
+  # make plots of numbers of satellites used in PVT
+  echo "Running pltDAQ for NU1..."
+  local site="NU1"
+  local outputDir="${outputTopDir}/NU1"
+  local logFile="${outputDir}/ptMon.${site}.pvtSat.log"
+  ptMon-pvtSatNum.sh "${outputDir}" "NU1" "${cycle}" >"${logFile}" 2>&1 &
+
+  echo "Running pltDAQ for Super-K..."
+  site="Super-K"
+  outputDir="${outputTopDir}/SK"
+  logFile="${outputDir}/ptMon.${site}.pvtSat.log"
+  ptMon-pvtSatNum.sh "${outputDir}" "Super-K" "${cycle}" >"${logFile}" 2>&1 &
+}
+
 ## MAIN ##
 mkDAQplots # live, raw DAQ data (raw, uncorrected PT-OT measurements)
+mkSatPlots # PVT satellite numbers
