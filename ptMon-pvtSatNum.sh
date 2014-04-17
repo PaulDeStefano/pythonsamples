@@ -135,7 +135,7 @@ function getLeastFilesByName()
   for file in $( cat ${fileList} ); do {
     local fileYear=$( echo "${file}" | sed -r 's/.*yr(..).*/\1/' )
     local fileDay=$( echo "${file}" |  sed -r 's/.*day(..).*/\1/' )
-    if expr ${fileDay} '>=' ${startDay} && ${fileYear} -eq ${startYear} ; then {
+    if expr ${fileDay} '>=' ${startDay} >/dev/null && ${fileYear} -eq ${startYear} ; then {
       echo "${file}" >> "${newFileList}"
     } fi
 
