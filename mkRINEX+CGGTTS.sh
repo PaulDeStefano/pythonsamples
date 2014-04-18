@@ -147,8 +147,9 @@ function getSBF() {
     endFile="${tmpDir}/endFile"
     touch --date="@0" "${beginFile}" >/dev/null 2>&1
     touch --date="tomorrow" "${endFile}" >/dev/null 2>&1
-    if [[ ! -z "${beginT}" ]]; then touch --date="${beginT}" "${beginFile}"; fi
-    if [[ ! -z "${endT}" ]]; then touch --date="${endT}" "${endFile}"; fi
+    if [[ ! -z "${beginT}" ]]; then touch -t "${beginT}" "${beginFile}"; fi
+    if [[ ! -z "${endT}" ]]; then touch -t "${endT}" "${endFile}"; fi
+    logMsg "DEBUG: begin time: $(date --reference=${beginFile}), end time: $(date --reference=${endFile})"
 
     # find SBF files
     ( /usr/bin/find ${sbfTopDir}/sukrnh5/DATA ${sbfTopDir}/gpsptnu1/DATA ${sbfTopDir}/triptgsc/nd280data ${sbfTopDir}/traveller-box \
@@ -656,10 +657,10 @@ do
         --ctools*)              shift; eval consolidateToolsDir=\"$(readlink -m "${1}")\"; shift;;
         --consol*)              shift; eval consolidataDir=\"$(readlink -m "${1}")\"; shift;;
 
-        --begin*)               shift; eval beginTime="$(date --date="${1}" --utc +%F)"; shift;;
-        --end*)                 shift; eval endTime="$(date --date="${1}" --utc +%F)"; shift;;
+        --begin*)               shift; eval beginTime="$(date --date="${1}" --utc +%m%d%H%M)"; shift;;
+        --end*)                 shift; eval endTime="$(date --date="${1}" --utc +%m%d%H%M)"; shift;;
 
-        dry*|--dry* )           dryrun="yes"; shift;;
+        dry*|--dry* )           dryrun="yes"; logMsg "NOTICE: dry-run, processing will be skipped"; shift;;
         debug*|--debug* )       DEBUG="yes"; shift;;
         lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
         gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;
