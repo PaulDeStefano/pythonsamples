@@ -657,8 +657,8 @@ do
         --ctools*)              shift; eval consolidateToolsDir=\"$(readlink -m "${1}")\"; shift;;
         --consol*)              shift; eval consolidataDir=\"$(readlink -m "${1}")\"; shift;;
 
-        --begin*)               shift; eval beginTime="$(date --date="${1}" --utc +%m%d%H%M)"; shift;;
-        --end*)                 shift; eval endTime="$(date --date="${1}" --utc +%m%d%H%M)"; shift;;
+        --begin*)               shift; eval beginTime="$(date --date="${1}" --utc +%Y%m%d%H%M)"; shift;;
+        --end*)                 shift; eval endTime="$(date --date="${1}" --utc +%Y%m%d%H%M)"; shift;;
 
         dry*|--dry* )           dryrun="yes"; logMsg "NOTICE: dry-run, processing will be skipped"; shift;;
         debug*|--debug* )       DEBUG="yes"; shift;;
