@@ -1,7 +1,7 @@
 #!/bin/bash
 #===============================================================================
 #
-#          FILE:  ptMon-pvtSatNum.sh
+#          FILE:  ptMon-clkBias
 # 
 #         USAGE:  ./ptMon-pvtSatNum.sh <outputDir> NU1|Super-K|Trav|ND280 live|daily|weekly
 # 
@@ -42,6 +42,7 @@ cycle=${3}
 renice 20 -p ${$} >/dev/null
 
 # Mapping from PT site installation names to data directories
+pltType=rxClkBias
 commonRoot=/home/t2k/public_html/post/gpsgroup/ptdata/organizedData
 typeDir=pvtGeodetic
 siteList="NU1:${commonRoot}/${typeDir}/NU1SeptentrioGPS-PT00
@@ -51,15 +52,15 @@ Trav:${commonRoot}/${typeDir}/TravSeptentrioGPS-PT04
 "
 daqFileNameExp='*pvtGeo*.dat.*'
 daqFileExclude='^ISO'
-pltType=pvtGeo
 tmpDir=$(mktemp -d '/tmp/ptMon-tmp.XXXXX')
 fileList=${tmpDir}/ptMon-filelist.$$
 unixTimeColumn=2
-dataColumn=9
+dataColumn=7
 useCSV="CSV"
 loadAvgLimit=11
 
 DEBUG=no
+GNUPLOT_LIB=${GNUPLOT_LIB}:/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
 origWD=${PWD}
 
 # clean up working files on interupt or hangup
@@ -134,8 +135,10 @@ function getLeastFilesByName()
   for file in $( cat ${fileList} ); do {
     local fileYear=$( echo "${file}" | sed -r 's/.*yr(..).*/\1/' )
     local fileDay=$( echo "${file}" |  sed -r 's/.*day(..).*/\1/' )
+    logMsg "DEBUG: getLeastFilesByName: fileYear=${fileYear} fileDay=${fileDay}"
     if expr ${fileDay} '>=' ${startDay} >/dev/null && ${fileYear} -eq ${startYear} ; then {
       echo "${file}" >> "${newFileList}"
+      logMsg "DEBUG: getLeastFilesByName: including file: ${file}"
     } fi
 
   } done
@@ -218,9 +221,11 @@ function mkPlots()
     logMsg "ERROR: unable to find any ${pltType} files in directory ${dir}, skipping"
     return 1
   } else {
-    logMsg "NOTICE: found ${pltType} files."
+    logMsg "NOTICE: found files for plotting ${pltType}."
   } fi
   # get the UNIXtime 48 hours before right now, UTC
+  #local startTime="*" # DEBUG
+  #local endTime="*" # DEBUG
   [[ ! -z ${startSpec} ]] && local startTime=$( date --date="${startSpec}" --utc +%s )
   [[ ! -z ${endSpec} ]] && local endTime=$( date --date="${endSpec}" --utc +%s )
   # reduce file list using naming rules
@@ -231,7 +236,7 @@ function mkPlots()
   local filesToPlot=$( cat ${fileList} )
 
   local pltTitle="Precise Time GPS Receiver Satellites in PVT (at ${site}): ${startSpec} - ${endSpec} (UTC)"
-  local style="points pointtype 2 linewidth 1 linecolor 2"
+  local style="points pointtype 1 linewidth 2 linecolor 3"
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
   local gptCmds=''
@@ -242,8 +247,6 @@ function mkPlots()
   gptCmds=${gptCmds}'pltTitle="'${pltTitle}'";'
   gptCmds=${gptCmds}'fileList="'${filesToPlot}'";'
   gptCmds=${gptCmds}'styleExt="'${style}'";'
-  gptCmds=${gptCmds}'set yrange [ 0 : * ];'
-  gptCmds=${gptCmds}'yTitle="Satellites";'
   gptCmds=${gptCmds}'call "pt-plotgen.gpt" "'${useCSV}'";'
   logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   logMsg "NOTICE: making plots: ${pltTitle}"

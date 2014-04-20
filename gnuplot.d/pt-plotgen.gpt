@@ -8,15 +8,31 @@ useCSV="$0"
 #print "DEBUG: pltTitle=".pltTitle
 #print "DEBUG: fileList=".fileList
 
-load 'pt-set4time.gp'
-load 'pt-setTerm.gp'
+load 'pt-set4time.gp'         # X-axis is time
+load 'pt-setTerm.gp'          # plot as PNG graphic
+# input file is CSV, if indicated
 if ( useCSV eq "CSV" ) { load 'pt-set4csv.gp'; }
-set title pltTitle
-set xrange [ startTime : * ]
-#show xrange # DEBUG
+
+set title pltTitle            # set title
+
+# selected the optimal x range
+if ( exists( "startTime" ) ) {
+  set xrange [ startTime : * ]
+} else {
+  startTime = "*"
+}
+if ( exists( "endTime" ) ) {
+  set xrange [ startTime : endTime ]
+}
+show xrange # DEBUG
+
 set output outFile.".png"
 
-set ylabel 'time diff (ns)'
+if ( exists( "yTitle" ) ) {
+  set ylabel yTitle
+} else {
+  set ylabel 'time diff (ns)'
+} 
 set grid
 set macros
 style1 = "points pointtype 1 linewidth 2 linecolor 1"
