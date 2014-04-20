@@ -50,7 +50,6 @@ tmpDir=$(mktemp -d '/tmp/ptMon-tmp.XXXXX')
 fileList=${tmpDir}/ptMon-filelist.$$
 unixTimeColumn=3
 dataColumn=2
-GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
 loadAvgLimit=11
 
 # clean up working files on interupt or hangup
@@ -187,6 +186,19 @@ if [ -z "${siteName}" ]; then logMsg "ERROR: second parameter, site name, requir
 if [ -z "${outputDir}" ]; then logMsg "ERROR: first parameter, output directory, required but missing."; exit 1; fi
 if [ ! -d "${outputDir}" ]; then logMsg "ERROR: cannot find output directory: ${outputDir}"; exit 1; fi
 if ! which gnuplot >/dev/null 2>&1 ; then logMsg "ERROR: cannot find gnuplot"; exit 1; fi
+
+if [[ -z "${GNUPLOT_LIB}" ]]; then
+  #GNUPLOT_LIB=${GNUPLOT_LIB}:/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
+  GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
+  logMsg "WARNING: GNUPLOT_LIB not set, using default: ${GNUPLOT_LIB}"
+else
+  for path in $(echo ${GNUPLOT_LIB}|tr : ' ' ); do
+    if find ${path} -maxdepth 1 pt-plotgen.gpt >/dev/null 2>/dev/null; then
+      gnuPlotPathOK=yes
+    fi
+  done
+  if [[ ! -z ${gnuPlotPathOK} ]]; then logMsg "ERROR: cannot find pt-plotgen.gpt in GNUPLOT_LIB path."; exit 1; fi
+fi
 
 loadAvg=$(uptime | awk '{print $(NF-2)}' |sed 's/,//')
 if echo ${loadAvg} ${loadAvgLimit} | awk 'END { exit ( ! ($1 >= $2) ) }' ; then {

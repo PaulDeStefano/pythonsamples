@@ -235,7 +235,7 @@ function mkPlots()
   #getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
   local filesToPlot=$( cat ${fileList} )
 
-  local pltTitle="Precise Time GPS Receiver Satellites in PVT (at ${site}): ${startSpec} - ${endSpec} (UTC)"
+  local pltTitle="PT GPS (${site}), Rubidium - GNSS Time (rxClkBias): ${startSpec} -to- ${endSpec} (UTC)"
   local style="points pointtype 1 linewidth 2 linecolor 3"
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
@@ -243,14 +243,14 @@ function mkPlots()
   [[ ! -z ${startSpec} ]] && gptCmds=${gptCmds}'startTime="'${startTime}'";'
   [[ ! -z ${endSpec} ]] && gptCmds=${gptCmds}'endTime="'${endTime}'";'
   gptCmds=${gptCmds}'outFile="'${tmpDir}/outfile'";'
-  gptCmds=${gptCmds}'pltCmd="'${unixTimeColumn}':'${dataColumn}'";'
+  gptCmds=${gptCmds}'pltCmd="'${unixTimeColumn}':($'${dataColumn}'*10**6)";'
   gptCmds=${gptCmds}'pltTitle="'${pltTitle}'";'
   gptCmds=${gptCmds}'fileList="'${filesToPlot}'";'
   gptCmds=${gptCmds}'styleExt="'${style}'";'
-  gptCmds=${gptCmds}'call "pt-plotgen.gpt" "'${useCSV}'";'
+  gptCmds=${gptCmds}'useCSV="CSV";'
   logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   logMsg "NOTICE: making plots: ${pltTitle}"
-  ${pltProg} -e "${gptCmds}"
+  ${pltProg} -e "${gptCmds}" pt-plotgen.gpt
 
   ## clean up
   rm ${fileList}

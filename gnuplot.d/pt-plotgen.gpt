@@ -1,6 +1,6 @@
 ## GNUplot script for making T2K TOF Precise Time plots
 
-useCSV="$0"
+#useCSV="$0"
 #print "DEBUG: useCSV=".useCSV
 #print "DEBUG: startTime=".startTime
 #print "DEBUG: outFile=".outFile
@@ -11,6 +11,7 @@ useCSV="$0"
 load 'pt-set4time.gp'         # X-axis is time
 load 'pt-setTerm.gp'          # plot as PNG graphic
 # input file is CSV, if indicated
+if ( ! exists( "useCSV" ) ) { useCSV="no" }
 if ( useCSV eq "CSV" ) { load 'pt-set4csv.gp'; }
 
 set title pltTitle            # set title

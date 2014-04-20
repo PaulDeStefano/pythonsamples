@@ -230,7 +230,7 @@ function mkPlots()
   #getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
   local filesToPlot=$( cat ${fileList} )
 
-  local pltTitle="Precise Time GPS Receiver Satellites in PVT (at ${site}): ${startSpec} - ${endSpec} (UTC)"
+  local pltTitle="Precise Time GPS Receiver (${site}), Satellites in PVT: ${startSpec} -to- ${endSpec} (UTC)"
   local style="points pointtype 2 linewidth 1 linecolor 2"
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
@@ -244,10 +244,10 @@ function mkPlots()
   gptCmds=${gptCmds}'styleExt="'${style}'";'
   gptCmds=${gptCmds}'set yrange [ 0 : * ];'
   gptCmds=${gptCmds}'yTitle="Satellites";'
-  gptCmds=${gptCmds}'call "pt-plotgen.gpt" "'${useCSV}'";'
+  gptCmds=${gptCmds}'useCSV="CSV";'
   logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   logMsg "NOTICE: making plots: ${pltTitle}"
-  ${pltProg} -e "${gptCmds}"
+  ${pltProg} -e "${gptCmds}" pt-plotgen.gpt
 
   ## clean up
   rm ${fileList}
