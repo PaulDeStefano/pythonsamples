@@ -56,7 +56,7 @@ function doConfig() {
   if ! sbf2rinProg="$(which sbf2rin)"; then confErr=0 ; echo "ERROR: cannot find sbf2rin" 1>&2; fi
   if ! rin2cggProg="$(which rin2cgg)"; then confErr=0 ; echo "ERROR: cannot find rin2cgg" 1>&2; fi
   rinFileName='${id}${day}'
-  if ! sbf2offset="$(which sbf2PVTGeo.py)"; then confErr=0; echo "ERROR: cannot find sbf2PVTGeo.py" 1>&2; fi
+  if ! sbf2offset="$(which sbf2offset.py)"; then confErr=0; echo "ERROR: cannot find sbf2PVTGeo.py" 1>&2; fi
   offsetTopDir="${resultsTopDir}/xPPSOffsets"
   offsetDir='${offsetTopDir}/${rxName}/${element}'
   offsetFileName='xppsoffset.${id}.${typ}.yr${yr}.day${day}.part${part}.dat'
@@ -332,8 +332,8 @@ function sbfExtract() {
   local doType="do${blkType}"
   local progType="sbf2${blkType}"
   local extractProg="${!progType}"
-  #logMsg "DEBUG: extractProg=${extractProg}"
-  #logMsg "DEBUG: doType=${doType} !doType=${!doType}"
+  logMsg "DEBUG: extractProg=${extractProg}"
+  logMsg "DEBUG: doType=${doType} !doType=${!doType}"
 
   if [[ ! yes = ${!doType} ]]; then logMsg "NOTICE: skipping ${blkType} extraction."; return 0; fi
   logMsg "NOTICE: extracting ${blkType} data with program ${extractProg}"
