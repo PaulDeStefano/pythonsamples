@@ -242,7 +242,7 @@ function mkPlots()
   gptCmds=${gptCmds}'pltTitle="'${pltTitle}'";'
   gptCmds=${gptCmds}'fileList="'${filesToPlot}'";'
   gptCmds=${gptCmds}'styleExt="'${style}'";'
-  gptCmds=${gptCmds}'set yrange [ 0 : 20 ];'
+  gptCmds=${gptCmds}'set yrange [ 0 : * ];'
   gptCmds=${gptCmds}'call "pt-plotgen.gpt" "'${useCSV}'";'
   #logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   logMsg "NOTICE: making plots: ${site}: ${dateSpec}"
