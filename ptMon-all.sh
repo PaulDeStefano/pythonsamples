@@ -58,8 +58,9 @@ function mkDAQplots() {
   logFile="${outputDir}/ptMon.${site}.rawDAQ.log"
   ptMon-pltDAQ.sh "${outputDir}" "Super-K" "${cycle}" >"${logFile}" 2>&1 &
 
+  echo "...waiting..."
   wait
-  echo "...done: $?"
+  echo "...done: exit code: $?"
 }
 
 function mkSatPlots() {
@@ -68,19 +69,50 @@ function mkSatPlots() {
   if [[ ${cycle} == live ]]; then return 0; fi
   
   # make plots of numbers of satellites used in PVT
-  echo "Running pltDAQ for NU1..."
+  echo "Running SV in PVT Plots for NU1..."
   local site="NU1"
   local outputDir="${outputTopDir}/NU1"
   local logFile="${outputDir}/ptMon.${site}.pvtSat.log"
   ptMon-pvtSatNum.sh "${outputDir}" "NU1" "${cycle}" >"${logFile}" 2>&1 &
 
-  echo "Running pltDAQ for Super-K..."
+  echo "Running SV in PVT Plots for Super-K..."
   site="Super-K"
   outputDir="${outputTopDir}/SK"
   logFile="${outputDir}/ptMon.${site}.pvtSat.log"
   ptMon-pvtSatNum.sh "${outputDir}" "Super-K" "${cycle}" >"${logFile}" 2>&1 &
+
+  echo "...waiting..."
+  wait
+  echo "...done: exit code: $?"
 }
+
+function mkBiasPlots() {
+
+  # don't run live cycles for this data
+  if [[ ${cycle} == live ]]; then return 0; fi
+  
+  # make plots of numbers of satellites used in PVT
+  echo "Running rxClkBias Plots for NU1..."
+  local site="NU1"
+  local outputDir="${outputTopDir}/NU1"
+  local logFile="${outputDir}/ptMon.${site}.rxClkBias.log"
+  ptMon-clkBias.sh "${outputDir}" "NU1" "${cycle}" >"${logFile}" 2>&1 &
+
+  echo "Running rxClkBias plots for Super-K..."
+  site="Super-K"
+  outputDir="${outputTopDir}/SK"
+  logFile="${outputDir}/ptMon.${site}.pvtSat.log"
+  ptMon-clkBias.sh "${outputDir}" "Super-K" "${cycle}" >"${logFile}" 2>&1 &
+
+  echo "...waiting..."
+  wait
+  echo "...done: exit code: $?"
+}
+
+## Configuration ##
+GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
 
 ## MAIN ##
 mkDAQplots # live, raw DAQ data (raw, uncorrected PT-OT measurements)
 mkSatPlots # PVT satellite numbers
+mkBiasPlots # RxClkBias

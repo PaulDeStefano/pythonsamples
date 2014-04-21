@@ -251,6 +251,7 @@ function mkPlots()
 
   ## clean up
   rm ${fileList}
+  logMsg "NOTICE: ...done."
 }
 
 function mk48h() {
