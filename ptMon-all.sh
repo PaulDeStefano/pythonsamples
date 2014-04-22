@@ -101,7 +101,7 @@ function mkBiasPlots() {
   echo "Running rxClkBias plots for Super-K..."
   site="Super-K"
   outputDir="${outputTopDir}/SK"
-  logFile="${outputDir}/ptMon.${site}.pvtSat.log"
+  logFile="${outputDir}/ptMon.${site}.rxClkBias.log"
   ptMon-clkBias.sh "${outputDir}" "Super-K" "${cycle}" >"${logFile}" 2>&1 &
 
   echo "...waiting..."
