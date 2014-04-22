@@ -212,7 +212,7 @@ function mkPlots()
   local site=$4      # date specification
 
   getDAQFileList "${site}" "${fileList}"
-  #logMsg "DEBUG: " $(head -n 3 ${fileList})
+  logMsg "DEBUG: " $(head -n 3 ${fileList})
   if [ -z "$(head -n 1 ${fileList})" ]; then {
     # no files, failure
     logMsg "ERROR: unable to find any ${pltType} files in directory ${dir}, skipping"
@@ -220,6 +220,7 @@ function mkPlots()
   } else {
     logMsg "NOTICE: found ${pltType} files."
   } fi
+
   # get the UNIXtime 48 hours before right now, UTC
   [[ ! -z ${startSpec} ]] && local startTime=$( date --date="${startSpec}" --utc +%s )
   [[ ! -z ${endSpec} ]] && local endTime=$( date --date="${endSpec}" --utc +%s )
@@ -230,24 +231,64 @@ function mkPlots()
   #getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
   local filesToPlot=$( cat ${fileList} )
 
-  local pltTitle="Precise Time GPS Receiver (${site}), Satellites in PVT: ${startSpec} -to- ${endSpec} (UTC)"
+  # make datfile from file list
+  local datFileName="${tmpDir}/tempDatFile.$$"
+  # pick put fields and exclude first line as it is probably header
+  cat ${fileList} | xargs -n 1 tail -n +1 | awk -F',' '{print $'${unixTimeColumn}',$'${dataColumn}'}' > ${datFileName}
+  logMsg "DEBUG: head+tail of partially rebuilt datafile: $(head -n 3 ${datFileName}; tail -n 3 ${datFileName})"
+  # find minimal data by exluding data before and after
+  beginLine=$(grep --max-count=2 --line-number "^${startTime}" "${datFileName}" | cut -d':' -f1)
+  endLine=$(grep --max-count=2 --line-number "^$(${endTime}-16)" "${datFileName}" | cut -d':' -f1)
+  # TODO check to see if more then one number is returned
+  if [[ -z "${beginLine}" ]]; then logMsg "ERROR: data doesn't include startTime: ${startTime}"; exit 1; fi
+  local newDatFile=${tmpDir}/newDatFile
+  # rebuild file
+  if [[ -z "${endLine}" ]]; then 
+    logMsg "NOTICE: data doensn't include endTime: ${endTime}"; 
+    head -n "${endLine}" | tail -n "+${beginLine}" ${datFileName} >${newDatFile}
+  else
+    tail -n "+${beginLine}" "${datFileName}" >${newDatFile}
+  fi
+  mv "${newDatFile}" "${datFileName}"
+  logMsg "DEBUG: head of rebuilt datafile: $(head -n 3 ${datFileName}; tail -n 3 ${datFileName})"
+
+  local pltTitle="Precise Time GPS Receiver (${site}), Satellites in PVT: ${startSpec} -- ${endSpec} (UTC)"
   local style="points pointtype 2 linewidth 1 linecolor 2"
   # run plotter
-  #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
   local gptCmds=''
   [[ ! -z ${startSpec} ]] && gptCmds=${gptCmds}'startTime="'${startTime}'";'
   [[ ! -z ${endSpec} ]] && gptCmds=${gptCmds}'endTime="'${endTime}'";'
   gptCmds=${gptCmds}'outFile="'${tmpDir}/outfile'";'
-  gptCmds=${gptCmds}'pltCmd="'${unixTimeColumn}':'${dataColumn}'";'
+  gptCmds=${gptCmds}'pltCmd="1:2";'
   gptCmds=${gptCmds}'pltTitle="'${pltTitle}'";'
-  gptCmds=${gptCmds}'fileList="'${filesToPlot}'";'
+  gptCmds=${gptCmds}'fileList="'${datFileName}'";'
   gptCmds=${gptCmds}'styleExt="'${style}'";'
   gptCmds=${gptCmds}'set yrange [ 0 : * ];'
   gptCmds=${gptCmds}'yTitle="Satellites";'
-  gptCmds=${gptCmds}'useCSV="CSV";'
-  logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
+  #gptCmds=${gptCmds}'useCSV="CSV";'
+  gptCmds=${gptCmds}'doHist="yes";'
   logMsg "NOTICE: making plots: ${pltTitle}"
+  logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   ${pltProg} -e "${gptCmds}" pt-plotgen.gpt
+  # add plot type to list
+  pltTypeList="${pltTypeList} ."
+
+  # make histogram
+  gptCmds=''
+  pltTitle="PTGPS (${site}), Sats in PVT: histogram\n ${startSpec} -- ${endSpec} (UTC)"
+  gptCmds=${gptCmds}'pltTitle="'${pltTitle}'";'
+  #gptCmds=${gptCmds}'datCol=1;'
+  gptCmds=${gptCmds}'datFile="'${datFileName}'";'
+  gptCmds=${gptCmds}'outFile="'${tmpDir}/outfile.hist'";'
+  gptCmds=${gptCmds}'Min=0;'
+  gptCmds=${gptCmds}'Max=30;'
+  gptCmds=${gptCmds}'n=30;'
+  #gptCmds=${gptCmds}'useStats="yes";'
+  logMsg "NOTICE: making histograms: ${pltTitle}"
+  logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
+  ${pltProg} -e "${gptCmds}" pt-histgen.gpt
+  # add histogram to list
+  pltTypeList="${pltTypeList} .hist."
 
   ## clean up
   rm ${fileList}
@@ -256,17 +297,17 @@ function mkPlots()
 
 function mk48h() {
   mkPlots "-3" "00:00 2 days ago" "00:00 today" "${siteName}"
-  mv "${tmpDir}/outfile.png" "${outputDir}/ptMon.${siteName}.${pltType}.48hours.png"
+  rangeList="${rangeList} 48hours"
 }
 
 function mk7day() {
   mkPlots "-8" "00:00 7 days ago" "00:00 today" "${siteName}"
-  mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.${pltType}.8days.png
+  rangeList="${rangeList} 8days"
 }
 
 function mk30day() {
   mkPlots "-31" "00:00 30 days ago" "00:00 today" "${siteName}"
-  mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.${pltType}.30days.png
+  rangeList="${rangeList} 30days"
 }
 
 ## MAIN ##
@@ -304,10 +345,19 @@ TZ=UTC; export TZ
 
 set +e
 case "${cycle}" in
-  live|--live)        mk48h ;;
+  live|--live)        shift; mk48h ;;
 
-  da*|--da*)          mk48h; mk7day;;
+  da*|--da*)          shift; mk48h; mk7day ;;
 
-  week*|--week*)      mk48h; mk7day; mk30day;;
-
+  week*|--week*)      shift; mk48h; mk7day; mk30day ;;
 esac
+
+# Move files to final locations
+for timeRange in ${rangeList}; do
+  for filePltType in ${pltTypeList}; do
+    moveFile="outfile${filePltType}png"
+    if [[ ! -r "${tmpDir}/${moveFile}" ]]; then logMsg "WARNING: cannot find file to move, skipping: ${moveFile}"; continue; fi
+    destFile="ptMon.${siteName}.${pltType}.${timeRange}${filePltType}png"
+    mv "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
+  done
+done

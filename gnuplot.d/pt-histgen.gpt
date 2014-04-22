@@ -1,0 +1,64 @@
+## GNUplot script for making T2K TOF Precise Time plots
+
+#useCSV="$0"
+#print "DEBUG: useCSV=".useCSV
+#print "DEBUG: startTime=".startTime
+#print "DEBUG: endTime=".endTime
+#print "DEBUG: outFile=".outFile
+#print "DEBUG: pltCmd=".pltCmd
+#print "DEBUG: pltTitle=".pltTitle
+#print "DEBUG: datFile=".datFile
+#print "DEBUG: Min=".Min
+#print "DEBUG: Max=".Max
+#print "DEBUG: n=".n
+
+pngWidth=320                  # set size of PNG graphic
+pngHeight=240
+load 'pt-setTerm.gp'          # plot as PNG graphic
+# input file is CSV, if indicated
+#if ( ! exists( "useCSV" ) ) { useCSV="no" }
+#if ( useCSV eq "CSV" ) { load 'pt-set4csv.gp'; }
+
+set title pltTitle            # set title
+
+set grid
+set macros
+style1 = "linewidth 2 linecolor 2"
+style2 = "linewidth 0 linecolor 2"
+if ( exist( "styleExt" ) ) { 
+  style3 = styleExt
+} else {
+  style3 = style2
+}
+#print "DEBUG: using style=".style3
+
+# Historgram
+if ( ! exists("datCol") ) {
+  # assume column 2 is data
+  datCol=2
+}
+width=(Max-Min)/n  # Default Width
+if ( exists("useStats") ) {
+  #print "DEBUG: using gnuplot statisics to make histogram"
+  stats datFile using datCol name "datVal" nooutput
+  Max=datVal_max
+  Min=datVal_min
+  # impliment "Scott's Rule" bin width algorithm
+  width=3.5*datVal_stddev/(datVal_records**(1.0/3))
+}
+#print "DEBUG: datCol=".datCol
+bin(x,w) = w*(floor((x-Min)/w)+w/2) + Min
+set xrange [ Min : Max+width ]
+set yrange [ 0 : * ]
+
+set output outFile.".png"
+plot datFile using (bin((column(datCol)),width)):(1) smooth freq with boxes fs solid @style3 notitle
+#plot datFile using (floor(column(datCol))):(1) smooth freq with boxes fs solid @style3 notitle
+#plot datFile using (floor(column(datCol))):(1) smooth freq with histeps @style1 notitle
+#print "done with regular historgram" #DEBUG
+unset output
+# cannot do logscale with smooth freq because it's a hack
+#set output outFile."log.png"
+#set logscale y
+#plot datFile using (bin(($2),width)):(1.0) smooth freq with histeps @style3 notitle
+#print "done with logscale historgram" #DEBUG
