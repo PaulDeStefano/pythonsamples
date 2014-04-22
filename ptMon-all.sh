@@ -104,6 +104,29 @@ function mkBiasPlots() {
   echo "...done: exit code: $?"
 }
 
+function mkRxLogs() {
+  # pull receiver logs and store them with the plots
+  # don't run live cycles for this data
+  if [[ ${cycle} == live ]]; then return 0; fi
+  local fileType="fetchLog"
+
+  local siteName="NU1"
+  echo "Pulling Receiver Logs for ${siteName} ..."
+  local outputDir="${outputTopDir}/NU1"
+  local logFile="${outputDir}/ptMon.${siteName}.${fileType}.log"
+  ptMon-fetchRxLog.sh "${outputDir}" "{siteName}" "${cycle}" >"${logFile}" 2>&1 &
+
+  siteName="Super-K"
+  echo "Pulling Receiver Logs for ${siteName} ..."
+  outputDir="${outputTopDir}/SK"
+  logFile="${outputDir}/ptMon.${siteName}.${fileType}.log"
+  ptMon-fetchRxLog.sh "${outputDir}" "{siteName}" "${cycle}" >"${logFile}" 2>&1 &
+
+  echo "...waiting..."
+  wait
+  echo "...done: exit code: $?"
+}
+
 ## Configuration ##
 
 if [ -z "${cycle}" ]; then echo "ERROR: parameter #2 required, cycle type" 1>&2; exit 1; fi
@@ -117,3 +140,4 @@ if ! which ptMon-pltDAQ.sh >/dev/null 2>&1 ; then echo "ERROR: cannot find ptMon
 mkDAQplots # live, raw DAQ data (raw, uncorrected PT-OT measurements)
 mkSatPlots # PVT satellite numbers
 mkBiasPlots # RxClkBias
+mkRxLogs # Receiver Logs (i.e. PVTGeodetic Block Errors)
