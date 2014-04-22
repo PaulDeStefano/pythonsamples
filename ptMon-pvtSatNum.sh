@@ -231,7 +231,7 @@ function mkPlots()
   #getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
   local filesToPlot=$( cat ${fileList} )
 
-  logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${pltTitle}"
+  logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${startSpec} -- ${endSpec}"
   # make datfile from file list
   local datFileName="${tmpDir}/tempDatFile.$$"
   # pick put fields and exclude first line as it is probably header
