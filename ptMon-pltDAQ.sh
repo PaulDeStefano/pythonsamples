@@ -154,13 +154,24 @@ function mkPlots()
   gptCmds=${gptCmds}'fileList="'${filesToPlot}'"'
   #gptCmds=${gptCmds}'styleExt="'${styleName}'"'
   #logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
-  logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${site}:${dateSpec}"
+  logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${pltTitle}"
   gnuplot -e "${gptCmds}" pt-plotgen.gpt
   #gnuplot -e 'startTime="'${startTime}'";outFile="'${tmpDir}'";pltCmd="using '${unixTimeColumn}':$('${dataColumn}'*10**9)";pltTitle="test title";fileList="'$file'"' gnuplot.d/pt-plotgen.gpt
   logMsg "NOTICE: $(date --rfc-3339=seconds): ...done"
 
   ## clean up
   rm ${fileList}
+}
+
+function storeResults() {
+  # Move files to final locations
+  timeRange=${1}
+    for filePltType in ${pltTypeList}; do
+      moveFile="outfile${filePltType}png"
+      if [[ ! -r "${tmpDir}/${moveFile}" ]]; then logMsg "WARNING: cannot find file to move, skipping: ${moveFile}"; continue; fi
+      destFile="ptMon.${siteName}.${pltType}.${timeRange}${filePltType}png"
+      mv "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
+    done
 }
 
 function mk48h() {

@@ -221,7 +221,7 @@ function mkPlots()
     logMsg "NOTICE: found ${pltType} files."
   } fi
 
-  # get the UNIXtime 48 hours before right now, UTC
+  # get the UNIXtime at the start and end of the target period
   [[ ! -z ${startSpec} ]] && local startTime=$( date --date="${startSpec}" --utc +%s )
   [[ ! -z ${endSpec} ]] && local endTime=$( date --date="${endSpec}" --utc +%s )
   # reduce file list using naming rules
@@ -231,6 +231,7 @@ function mkPlots()
   #getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
   local filesToPlot=$( cat ${fileList} )
 
+  logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${pltTitle}"
   # make datfile from file list
   local datFileName="${tmpDir}/tempDatFile.$$"
   # pick put fields and exclude first line as it is probably header
@@ -267,7 +268,6 @@ function mkPlots()
   gptCmds=${gptCmds}'yTitle="Satellites";'
   #gptCmds=${gptCmds}'useCSV="CSV";'
   gptCmds=${gptCmds}'doHist="yes";'
-  logMsg "NOTICE: making plots: ${pltTitle}"
   logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   ${pltProg} -e "${gptCmds}" pt-plotgen.gpt
   # add plot type to list
@@ -292,22 +292,36 @@ function mkPlots()
 
   ## clean up
   rm ${fileList}
-  logMsg "NOTICE: ...done."
+  logMsg "NOTICE: $(date --rfc-3339=seconds): ...done"
+}
+
+function storeResults() {
+  # Move files to final locations
+  timeRange=${1}
+    for filePltType in ${pltTypeList}; do
+      moveFile="outfile${filePltType}png"
+      if [[ ! -r "${tmpDir}/${moveFile}" ]]; then logMsg "WARNING: cannot find file to move, skipping: ${moveFile}"; continue; fi
+      destFile="ptMon.${siteName}.${pltType}.${timeRange}${filePltType}png"
+      mv "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
+    done
 }
 
 function mk48h() {
+  pltTypeList=
   mkPlots "-3" "00:00 2 days ago" "00:00 today" "${siteName}"
-  rangeList="${rangeList} 48hours"
+  storeResults "48hours"
 }
 
 function mk7day() {
+  pltTypeList=
   mkPlots "-8" "00:00 7 days ago" "00:00 today" "${siteName}"
-  rangeList="${rangeList} 8days"
+  storeResults "8days"
 }
 
 function mk30day() {
+  pltTypeList=
   mkPlots "-31" "00:00 30 days ago" "00:00 today" "${siteName}"
-  rangeList="${rangeList} 30days"
+  storeResults "30days"
 }
 
 ## MAIN ##
@@ -351,13 +365,3 @@ case "${cycle}" in
 
   week*|--week*)      shift; mk48h; mk7day; mk30day ;;
 esac
-
-# Move files to final locations
-for timeRange in ${rangeList}; do
-  for filePltType in ${pltTypeList}; do
-    moveFile="outfile${filePltType}png"
-    if [[ ! -r "${tmpDir}/${moveFile}" ]]; then logMsg "WARNING: cannot find file to move, skipping: ${moveFile}"; continue; fi
-    destFile="ptMon.${siteName}.${pltType}.${timeRange}${filePltType}png"
-    mv "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
-  done
-done

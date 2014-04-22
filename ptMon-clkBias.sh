@@ -248,12 +248,23 @@ function mkPlots()
   gptCmds=${gptCmds}'styleExt="'${style}'";'
   gptCmds=${gptCmds}'useCSV="CSV";'
   logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
-  logMsg "NOTICE: making plots: ${pltTitle}"
+  logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${pltTitle}"
   ${pltProg} -e "${gptCmds}" pt-plotgen.gpt
 
   ## clean up
   rm ${fileList}
-  logMsg "NOTICE: ...done."
+  logMsg "NOTICE: $(date --rfc-3339=seconds): ...done"
+}
+
+function storeResults() {
+  # Move files to final locations
+  timeRange=${1}
+    for filePltType in ${pltTypeList}; do
+      moveFile="outfile${filePltType}png"
+      if [[ ! -r "${tmpDir}/${moveFile}" ]]; then logMsg "WARNING: cannot find file to move, skipping: ${moveFile}"; continue; fi
+      destFile="ptMon.${siteName}.${pltType}.${timeRange}${filePltType}png"
+      mv "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
+    done
 }
 
 function mk48h() {
