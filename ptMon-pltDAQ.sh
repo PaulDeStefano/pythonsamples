@@ -155,7 +155,7 @@ function mkPlots()
   #gptCmds=${gptCmds}'styleExt="'${styleName}'"'
   #logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${site}:${dateSpec}"
-  gnuplot -e "${gptCmds}" ${GNUPLOT_LIB}/pt-plotgen.gpt
+  gnuplot -e "${gptCmds}" pt-plotgen.gpt
   #gnuplot -e 'startTime="'${startTime}'";outFile="'${tmpDir}'";pltCmd="using '${unixTimeColumn}':$('${dataColumn}'*10**9)";pltTitle="test title";fileList="'$file'"' gnuplot.d/pt-plotgen.gpt
   logMsg "NOTICE: $(date --rfc-3339=seconds): ...done"
 
@@ -188,7 +188,6 @@ if [ ! -d "${outputDir}" ]; then logMsg "ERROR: cannot find output directory: ${
 if ! which gnuplot >/dev/null 2>&1 ; then logMsg "ERROR: cannot find gnuplot"; exit 1; fi
 
 if [[ -z "${GNUPLOT_LIB}" ]]; then
-  #GNUPLOT_LIB=${GNUPLOT_LIB}:/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
   GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
   logMsg "WARNING: GNUPLOT_LIB not set, using default: ${GNUPLOT_LIB}"
 else

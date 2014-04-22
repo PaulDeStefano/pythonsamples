@@ -37,11 +37,6 @@
 
 outputTopDir=${1}
 cycle=${2}
-if [ -z "${cycle}" ]; then echo "ERROR: parameter #2 required, cycle type" 1>&2; exit 1; fi
-if [ -z "${outputTopDir}" ]; then echo "ERROR: parameter #1 required, output directory" 1>&2; exit 1; fi
-if [ ! -d "${outputTopDir}" ]; then echo "ERROR: cannot find log directory: ${outputTopDir}" 1>&2; exit 1; fi
-
-if ! which ptMon-pltDAQ.sh >/dev/null 2>&1 ; then echo "ERROR: cannot find ptMon-pltDAQ.sh" 1>&2; exit 1; fi
 
 function mkDAQplots() {
 
@@ -110,7 +105,13 @@ function mkBiasPlots() {
 }
 
 ## Configuration ##
-GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
+
+if [ -z "${cycle}" ]; then echo "ERROR: parameter #2 required, cycle type" 1>&2; exit 1; fi
+if [ -z "${outputTopDir}" ]; then echo "ERROR: parameter #1 required, output directory" 1>&2; exit 1; fi
+if [ ! -d "${outputTopDir}" ]; then echo "ERROR: cannot find log directory: ${outputTopDir}" 1>&2; exit 1; fi
+
+#if [[ -z "$GNUPLOT_LIB" ]]; then GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB ; fi  # default GNUPLOT search path
+if ! which ptMon-pltDAQ.sh >/dev/null 2>&1 ; then echo "ERROR: cannot find ptMon-pltDAQ.sh" 1>&2; exit 1; fi
 
 ## MAIN ##
 mkDAQplots # live, raw DAQ data (raw, uncorrected PT-OT measurements)

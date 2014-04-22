@@ -60,7 +60,6 @@ useCSV="CSV"
 loadAvgLimit=11
 
 DEBUG=no
-GNUPLOT_LIB=${GNUPLOT_LIB}:/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB
 origWD=${PWD}
 
 # clean up working files on interupt or hangup
