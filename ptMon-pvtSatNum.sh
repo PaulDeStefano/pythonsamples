@@ -239,7 +239,7 @@ function mkPlots()
   logMsg "DEBUG: head+tail of partially rebuilt datafile: $(head -n 3 ${datFileName}; tail -n 3 ${datFileName})"
   # find minimal data by exluding data before and after
   beginLine=$(grep --max-count=2 --line-number "^${startTime}" "${datFileName}" | cut -d':' -f1)
-  endLine=$(grep --max-count=2 --line-number "^$(${endTime}-16)" "${datFileName}" | cut -d':' -f1)
+  endLine=$(grep --max-count=2 --line-number "^$((${endTime}-16))" "${datFileName}" | cut -d':' -f1)
   # TODO check to see if more then one number is returned
   if [[ -z "${beginLine}" ]]; then logMsg "ERROR: data doesn't include startTime: ${startTime}"; exit 1; fi
   local newDatFile=${tmpDir}/newDatFile
