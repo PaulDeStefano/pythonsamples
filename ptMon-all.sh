@@ -114,13 +114,13 @@ function mkRxLogs() {
   echo "Pulling Receiver Logs for ${siteName} ..."
   local outputDir="${outputTopDir}/NU1"
   local logFile="${outputDir}/ptMon.${siteName}.${fileType}.log"
-  ptMon-fetchRxLog.sh "${outputDir}" "{siteName}" "${cycle}" >"${logFile}" 2>&1 &
+  ptMon-fetchRxLog.sh "${outputDir}" "${siteName}" "${cycle}" >"${logFile}" 2>&1 &
 
   siteName="Super-K"
   echo "Pulling Receiver Logs for ${siteName} ..."
   outputDir="${outputTopDir}/SK"
   logFile="${outputDir}/ptMon.${siteName}.${fileType}.log"
-  ptMon-fetchRxLog.sh "${outputDir}" "{siteName}" "${cycle}" >"${logFile}" 2>&1 &
+  ptMon-fetchRxLog.sh "${outputDir}" "${siteName}" "${cycle}" >"${logFile}" 2>&1 &
 
   echo "...waiting..."
   wait
