@@ -18,7 +18,6 @@ pathGrps="GPSData_Internal GPSData_External ND280"
 consolidateToolsDir=~gurfler/newgps/consolidata
 consolidataDir="/data-scratch/paul/consolidataTestDir"
 
-sbfFileList="/tmp/sbfFileList.$$"
 zProg="lzop"
 zExt="lzo"
 erex=".13_"
@@ -201,6 +200,55 @@ function mkRin() {
 
 }
 
+function getMJD() {
+  local yr=${1}
+  if [[ $yr -lt 12 || $yr -gt 50 ]]; then logMsg "ERROR: current year, 20$yr, is not in my MJD tables."; return 1; fi
+
+    # mtch year with MJD
+    case ${yr} in
+        12)         __yrMJD=55927;;
+        13)         __yrMJD=56293;;
+        14)         __yrMJD=56658;;
+        15)         __yrMJD=57023;;
+        16)         __yrMJD=57388;;
+        17)         __yrMJD=57754;;
+        18)         __yrMJD=58119;;
+        19)         __yrMJD=58484;;
+        20)         __yrMJD=58849;;
+        21)         __yrMJD=59215;;
+        22)         __yrMJD=59580;;
+        23)         __yrMJD=59945;;
+        24)         __yrMJD=60310;;
+        25)         __yrMJD=60676;;
+        26)         __yrMJD=61041;;
+        27)         __yrMJD=61406;;
+        28)         __yrMJD=61771;;
+        29)         __yrMJD=62137;;
+        30)         __yrMJD=62502;;
+        31)         __yrMJD=62867;;
+        32)         __yrMJD=63232;;
+        33)         __yrMJD=63598;;
+        34)         __yrMJD=63963;;
+        35)         __yrMJD=64328;;
+        36)         __yrMJD=64693;;
+        37)         __yrMJD=65059;;
+        38)         __yrMJD=65424;;
+        39)         __yrMJD=65789;;
+        40)         __yrMJD=66154;;
+        41)         __yrMJD=66520;;
+        42)         __yrMJD=66885;;
+        43)         __yrMJD=67250;;
+        44)         __yrMJD=67615;;
+        45)         __yrMJD=67981;;
+        46)         __yrMJD=68346;;
+        47)         __yrMJD=68711;;
+        48)         __yrMJD=69076;;
+        49)         __yrMJD=69442;;
+        50)         __yrMJD=69807;;
+    esac
+
+}
+
 function mkCGG() {
     local prev=${1}
     local curr=${2}
@@ -214,12 +262,20 @@ function mkCGG() {
     if [[ ! "yes" = ${doCGG} ]]; then logMsg "NOTICE: skipping CGGTTS production."; return 0; fi
     #logMsg "NOTICE: Working on RINEX/CGGTTS data for id ${id}, day ${day}, year 20${yr}"
 
-    # mtch year with MJD
-    case ${yr} in
-        12)         yrMJD=55927;;
-        13)         yrMJD=56293;;
-        14)         yrMJD=56658;;
-    esac
+    local yrMJD=0
+    getMJD ${yr}
+    if [[ ! $? -eq 0 ]]; then logMsg "WARNING: skipping CGGTTS production, MJD lookup failed."; return 0; fi
+    yrMJD=$__yrMJD
+    getMJD $(( ${yr} - 1 ))  # check the previous year
+    lastYrMJD=$__yrMJD
+    mjdDiff=$(( $yrMJD - $lastYrMJD )) 
+    if [[ ${mjdDiff} -eq 365 || ${mjdDiff} -eq 366 ]]; then {
+      : # everything seems okay
+    } else {
+      logMsg "ERROR: something is wrong with MJD lookup.  Consecutive January 1st's differ by ${mjdDiff}"
+      logMsg "WARNING: skipping CGGTTS production, MJD lookup failed."
+      return 0
+    } fi
 
     # add day, must eliminate leady zeros to do math
     local dday=$( echo ${day} | sed -e 's/0*//' )
@@ -247,30 +303,34 @@ function mkCGG() {
         return 1
     } fi
     ln -s --force "${cggParamFile}" ${cggParam}
-    #echo ${mjd} | ( ${rin2cggProg} 1> /dev/null 2>/dev/null )
     echo ${mjd} | ${rin2cggProg} >/dev/null
     eCode=$?
     logMsg "DEBUG: rin2ccg exit Code: ${eCode}"
+    local cggFile=
     if [[ ${eCode} -eq 0 && -f CGGTTS.gps ]]; then
-        eval local cggFile="${cggTopDir}/${rxName}/${subDir}/CGGTTS.${id}.${typ}.yr${yr}.day${day}.mjd${mjd}"
+        cggFile="${cggTopDir}/${rxName}/${subDir}/CGGTTS.${id}.${typ}.yr${yr}.day${day}.mjd${mjd}"
         local cggStoreDir=$(dirname ${cggFile})
         if [ ! -d ${cggStoreDir} ]; then mkdir --parents ${cggStoreDir}; fi
         logMsg "NOTICE: ...Done"
         [[ -f CGGTTS.gps ]] && mv CGGTTS.gps "${cggFile}.gps"
         [[ -f CGGTTS.out ]] && mv CGGTTS.out "${cggFile}.out"
         [[ -f CGGTTS.log ]] && mv CGGTTS.log "${cggFile}.log"
+
+        logMsg "NOTICE: compressing CGGTTS data..."
+        gzip -c ${cggFile}.gps >${cggFile}.gps.gz
+        rm ${cggFile}.gps
+        gzip -c ${cggFile}.log >${cggFile}.log.gz
+        rm ${cggFile}.log
     else
         logMsg "WARNING: failed to process RINEX data to CGGTTS for day ${day}"
         cat CGGTTS.log 1>&2
+        #[[ -f CGGTTS.gps ]] && rm CGGTTS.gps
+        #[[ -f CGGTTS.out ]] && rm CGGTTS.out
+        #[[ -f CGGTTS.log ]] && rm CGGTTS.log
         rm rinex_*
         rm ${cggParam}
     fi
 
-    logMsg "NOTICE: compressing CGGTTS data..."
-    gzip -c ${cggFile}.gps >${cggFile}.gps.gz
-    rm ${cggFile}.gps
-    gzip -c ${cggFile}.log >${cggFile}.log.gz
-    rm ${cggFile}.log
     logMsg "NOTICE: ...done."
 
     rmList=$(ls rinex_* CGGTTS.* ${cggParam} 2>/dev/null)
@@ -680,10 +740,11 @@ logMsg "DEBUG: sbfTopDir = ${sbfTopDir}"
 # use good temporary directory
 origWD="${PWD}"
 tmpDir=$(mktemp -d /tmp/mkRINEX.XXXXX)
+sbfFileList="/${tmpDir}/sbfFileList.$$"
 
 # trap exit for cleanup
 trapCmd="cd \"${origWD}\"; rm -rf \"${tmpDir}\""
-trap "${trapCmd}" EXIT 0
+trap "${trapCmd}" EXIT
 logMsg "DEBUG: traps : " && trap -p
 
 cd "${tmpDir}"
