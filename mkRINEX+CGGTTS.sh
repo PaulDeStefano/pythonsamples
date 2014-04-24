@@ -177,7 +177,7 @@ function nudgeTime() {
   local file="${1}"
   local oldTime=$(date --reference="${file}")
   logMsg "DEBUG: old file time: ${oldTime}"
-  touch -m --date="${oldTime} + 1 minute" "${file}" >/dev/null 2>&1
+  touch -m --date="${oldTime} + 1 second" "${file}" >/dev/null 2>&1
   logMsg "DEBUG: new file time:"$(date --reference=${file})
 }
 
