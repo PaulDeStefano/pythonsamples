@@ -246,9 +246,9 @@ function mkPlots()
   # rebuild file
   if [[ -z "${endLine}" ]]; then 
     logMsg "NOTICE: data doensn't include endTime: ${endTime}"; 
-    head -n "${endLine}" | tail -n "+${beginLine}" ${datFileName} >${newDatFile}
-  else
     tail -n "+${beginLine}" "${datFileName}" >${newDatFile}
+  else
+    head -n "${endLine}" | tail -n "+${beginLine}" ${datFileName} >${newDatFile}
   fi
   mv "${newDatFile}" "${datFileName}"
   logMsg "DEBUG: head of rebuilt datafile: $(head -n 3 ${datFileName}; tail -n 3 ${datFileName})"
