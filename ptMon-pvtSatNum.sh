@@ -253,7 +253,9 @@ function mkPlots()
   mv "${newDatFile}" "${datFileName}"
   logMsg "DEBUG: head of rebuilt datafile: $(head -n 3 ${datFileName}; tail -n 3 ${datFileName})"
 
-  local pltTitle="Precise Time GPS Receiver (${site}), Satellites in PVT: ${startSpec} -- ${endSpec} (UTC)"
+  #local currTime=$( date --utc --iso-8601=minutes)
+  local currTime=$( date --utc )
+  local pltTitle="Precise Time GPS Receiver (${site}), Satellites in PVT: ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
   local style="points pointtype 2 linewidth 1 linecolor 2"
   # run plotter
   local gptCmds=''

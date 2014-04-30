@@ -234,7 +234,9 @@ function mkPlots()
   #getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
   local filesToPlot=$( cat ${fileList} )
 
-  local pltTitle="PT GPS (${site}), Rubidium - GNSS Time (rxClkBias): ${startSpec} -to- ${endSpec} (UTC)"
+  #local currTime=$( date --utc --iso-8601=minutes)
+  local currTime=$( date --utc )
+  local pltTitle="PT GPS (${site}), Rubidium - GNSS Time (rxClkBias): ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
   local style="points pointtype 1 linewidth 2 linecolor 3"
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"

@@ -40,6 +40,7 @@ cycle=${3}
 
 # force process to run nice
 renice 20 -p ${$} >/dev/null
+export TZ="UTC"
 
 # Mapping from PT site installation names to data directories
 siteList="NU1:/data-scratch/gpsptnu1/DATA/LSU-TIC/TicData
@@ -125,8 +126,9 @@ function getDAQFileList() {
 function mkPlots()
 {
   local mtimeSpec=$1       # find mtime specification
-  local dateSpec=$2      # date specification
-  local site=$3      # date specification
+  local startSpec=$2      # date specification
+  local endSpec=$3      # date specification
+  local site=$4      # date specification
 
   getDAQFileList "${site}" "${fileList}"
   #logMsg "DEBUG: " $(head -n 3 ${fileList})
@@ -137,13 +139,16 @@ function mkPlots()
   } else {
     logMsg "NOTICE: found DAQ files."
   } fi
-  # get the UNIXtime 48 hours before right now, UTC
-  local startTime=$( date --date="${dateSpec}" --utc +%s )
+  # get the UNIXtime at the start and end of the target period
+  [[ ! -z ${startSpec} ]] && local startTime=$( date --date="${startSpec}" --utc +%s )
+  [[ ! -z ${endSpec} ]] && local endTime=$( date --date="${endSpec}" --utc +%s )
   # pair down the list of files by datestamps inside the files
   getLeastFiles ${fileList} ${startTime} ${unixTimeColumn}
   local filesToPlot=$( cat ${fileList} )
 
-  local pltTitle="Precise Time - Official Time (at ${site}): ${dateSpec}"
+  #local currTime=$( date --utc --iso-8601=minutes)
+  local currTime=$( date --utc )
+  local pltTitle="TIC Measurement (uncorrected) (${site}): ${startSpec} -- ${endSpec}\nplot created ${currTime}"
   local style="points pointtype 1 linewidth 1 linecolor 1"
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
@@ -175,17 +180,17 @@ function storeResults() {
 }
 
 function mk48h() {
-    mkPlots "-3" "now - 48 hours" "${siteName}"
+    mkPlots "-3" "now - 48 hours" "now" "${siteName}"
     mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.48hours.png
 }
 
 function mk7day() {
-    mkPlots "-8" "today - 7 days" "${siteName}"
+    mkPlots "-8" "today - 7 days" "today" "${siteName}"
     mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.8days.png
 }
 
 function mk30day() {
-    mkPlots "-31" "today - 30 days" "${siteName}"
+    mkPlots "-31" "today - 30 days" "today" "${siteName}"
     mv ${tmpDir}/outfile.png ${outputDir}/ptMon.${siteName}.rawDAQ.30days.png
 }
 
