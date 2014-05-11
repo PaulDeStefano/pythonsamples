@@ -5,7 +5,7 @@
 # 
 #         USAGE:  ./ptMon-pvtSatNum.sh <outputDir> NU1|Super-K|Trav|ND280 live|daily|weekly
 # 
-#   DESCRIPTION:  plot raw live DAQ data
+#   DESCRIPTION:  plot rxClkBias values
 # 
 #       OPTIONS:  ---
 #  REQUIREMENTS:  ---

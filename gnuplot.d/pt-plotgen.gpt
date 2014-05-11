@@ -7,6 +7,7 @@
 #print "DEBUG: pltCmd=".pltCmd
 #print "DEBUG: pltTitle=".pltTitle
 #print "DEBUG: fileList=".fileList
+print "DEBUG: labelList=".labelList
 
 load 'pt-set4time.gp'         # X-axis is time
 load 'pt-setTerm.gp'          # plot as PNG graphic
@@ -45,4 +46,10 @@ if ( exist( "styleExt" ) ) {
 }
 #print "DEBUG: using style=".style3
 
-plot for [f in fileList] f using @pltCmd with @style3 title ''
+if( exists("labelList") ) {
+  print "DEBUG: using label list"
+  plot for [t in labelList ] t.".dat" using @pltCmd @style3 title t
+} else {
+  print "DEBUG: using file list"
+  plot for [f in fileList] f using @pltCmd with @style3 title ''
+}
