@@ -5,7 +5,7 @@
 # 
 #         USAGE:  ./ptMon-pvtSatNum.sh <outputDir> NU1|Super-K|Trav|ND280 live|daily|weekly
 # 
-#   DESCRIPTION:  plot raw live DAQ data
+#   DESCRIPTION:  plot number of satellites used
 # 
 #       OPTIONS:  ---
 #  REQUIREMENTS:  ---
