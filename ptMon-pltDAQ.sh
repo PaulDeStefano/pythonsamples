@@ -153,6 +153,7 @@ function mkPlots()
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
   local gptCmds='startTime="'${startTime}'";'
+  gptCmds=${gptCmds}'endTime="'${endTime}'";'
   gptCmds=${gptCmds}'outFile="'${tmpDir}/outfile'";'
   gptCmds=${gptCmds}'pltCmd="'${unixTimeColumn}':($2 < 1.0 ? $'${dataColumn}'*10**9 : 1/0)";'
   gptCmds=${gptCmds}'pltTitle="'${pltTitle}'";'
