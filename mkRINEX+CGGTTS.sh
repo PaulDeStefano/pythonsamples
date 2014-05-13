@@ -373,7 +373,9 @@ function storeData() {
 
   if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
 
+  chmod 444 "${dataFile}.${zExt}"
   mv  "${dataFile}.${zExt}" "${finalDir}"/.
+  chmod 444 "${logFile}.${zExt}"
   mv  "${logFile}.${zExt}" "${finalDir}"/.
 }
 
@@ -437,11 +439,15 @@ function mkReport() {
   logMsg "DEBUG: outfile=${outfile} errfile=${errfile}"
   ${reportProg} -f "${sbfFile}" --layoutfile "${reportTemplate}" \
                 --silent --logfile ${errfile} -o ${outfile}
-  if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
+
+  # create dir if needed
+  if [[ ! -d ${finalDir} ]]; then mkdir --parents "${finalDir}"; chgrp tof "${finalDir}"; chmod g+ws "${finalDir}"; fi
   logMsg "DEBUG: moving report file to ${finalDir}/${outfile}"
   if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile} ]]; then {
+    chmod 444 "${outfile}.${zExt}"
     mv  "${outfile}" "${finalDir}"/.
     ${zProg} -c "${errfile}" >${errfile}.${zExt}
+    chmod 444 "${errfile}.${zExt}"
     mv  "${errfile}.${zExt}" "${finalDir}"/.
   } else {
     logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.  (--noclobber used)"
@@ -525,8 +531,10 @@ function mk3day() {
   logMsg "DEBUG: moving 3-day combined RINEX file to ${finalDir}/${outfile}"
   if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile} ]]; then {
     ${zProg} -c "${outfile}" >${outfile}.${zExt}
+    chmod 444 "${outfile}.${zExt}"
     mv  "${outfile}.${zExt}" "${finalDir}"/.
     ${zProg} -c "${errfile}" >${errfile}.${zExt}
+    chmod 444 "${errfile}.${zExt}"
     mv  "${errfile}.${zExt}" "${finalDir}"/.
   } else {
     logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.  (--noclobber used)"
@@ -650,6 +658,7 @@ function processSBF() {
                 if [[ "yes" = "${clobber}" || ! -e ${storeFile} ]]; then {
                     gzip -c ${rinfile} >${rinZ}
                     mv  ${rinZ} ${storeFile}
+                    chmod 444 "${storeFile}"
                 } else {
                     logMsg "WARNING: Refused to overwrite ${storeFile}.  (--noclobber used)"
                 } fi
