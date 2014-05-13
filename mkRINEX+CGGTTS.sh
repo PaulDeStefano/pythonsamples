@@ -703,7 +703,6 @@ do
         cgg*|CGG*|--cgg* )      doCGG="yes"; doRIN="yes"; shift;;
         off*|OFF*|--off* )      dooffset="yes"; shift;;
         xpps*|XPPS*|--xpps* )   dooffset="yes"; shift;;
-        xpps*|XPPS*|--xpps* )   dooffset="yes"; shift;;
         geo*|GEO*|--geo* )      dopvtGeo="yes"; shift;;
         stat*|STAT*|--stat* )   dorxStat="yes"; shift;;
         DOP*|DOP*|--dop* )      dodop="yes"; shift;;
