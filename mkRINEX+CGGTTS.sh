@@ -185,7 +185,7 @@ function mkRin() {
     local sbf=${1}
     local rin=${2}
 
-    if [[ ! "yes" = ${doRIN} ]]; then logMsg "NOTICE: skipping RINEX production."; return 0; fi
+    if [[ ! yes == ${doRIN} ]]; then logMsg "NOTICE: skipping RINEX production."; return 0; fi
 
     if [ -z "${rin}" ]; then logMsg "ERROR: need output name for RINEX data"; exit 1; fi
     logMsg "NOTICE: processing SBF data into RINEX files..."
@@ -259,7 +259,7 @@ function mkCGG() {
     local day=${6}
     local yr=${7}
 
-    if [[ ! "yes" = ${doCGG} ]]; then logMsg "NOTICE: skipping CGGTTS production."; return 0; fi
+    if [[ ! yes == ${doCGG} ]]; then logMsg "NOTICE: skipping CGGTTS production."; return 0; fi
     #logMsg "NOTICE: Working on RINEX/CGGTTS data for id ${id}, day ${day}, year 20${yr}"
 
     local yrMJD=0
@@ -395,7 +395,7 @@ function sbfExtract() {
   logMsg "DEBUG: extractProg=${extractProg}"
   logMsg "DEBUG: doType=${doType} !doType=${!doType}"
 
-  if [[ ! yes = ${!doType} ]]; then logMsg "NOTICE: skipping ${blkType} extraction."; return 0; fi
+  if [[ ! yes == ${!doType} ]]; then logMsg "NOTICE: skipping ${blkType} extraction."; return 0; fi
   logMsg "NOTICE: extracting ${blkType} data with program ${extractProg}"
   local typeFile="${blkType}FileName"
   eval local outfile="${!typeFile}"
@@ -611,20 +611,22 @@ function processSBF() {
             currRINEX="${rinexFile}"
             eval rinStoreDir="${rinexDir}"
             oldStoreFile="${rinStoreDir}/${currRINEX}.gz"
-            if [[ -f "${oldStoreFile}" && no = ${rebuild} ]]; then {
+            if [[ -f "${oldStoreFile}" && no == ${rebuild} && ${doRIN} == yes ]]; then {
               # pull copy form existing rinex datastore
               logMsg "WARNING: retrieving RINEX file from storage: ${oldStoreFile}, not recreateing, rebuild=no"
               gzip -dc ${oldStoreFile} > ${currRINEX}
             } fi
-            if [[ ! -e "${currRINEX}" || "yes" = "${rebuild}" ]]; then {
-                mkRin ${currSBF} ${currRINEX}
+            if [[ ! -e "${currRINEX}" || yes == ${rebuild} ]]; then {
+              logMsg "DEBUG: doRIN:${doRIN}"
+              mkRin ${currSBF} ${currRINEX}
             } else {
                 logMsg "WARNING: ${currRINEX} exists, not recreateing"
             } fi
 
             # make CGGTTS
             if [[ ! -z "${prevRINEX}" && -e "${prevRINEX}" ]]; then {
-               mkCGG ${prevRINEX} ${currRINEX} ${id} ${element} ${typ} ${day} ${yr}
+              logMsg "DEBUG: doCGG:${doCGG}"
+              mkCGG ${prevRINEX} ${currRINEX} ${id} ${element} ${typ} ${day} ${yr}
             } fi
 
             # make 3-day RINEX
@@ -633,8 +635,9 @@ function processSBF() {
             } fi
 
             # put RINEX file in organized location
-            logMsg "NOTICE: compressing and storing RINEX data"
             for rinfile in ${rinexFile%O}*; do {
+                if [ ! "${doRIN}" = "yes" ]; then logMsg "NOTICE: doRIN!=yes, skipping any effort to update RINEX"; continue; fi
+                logMsg "NOTICE: compressing and storing RINEX data"
                 if [ ! -f "${rinfile}" ]; then {
                   logMsg "WARNING: cannot find RINEX file ${rinfile}, mkRin failed??"
                   continue
