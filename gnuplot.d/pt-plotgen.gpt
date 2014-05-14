@@ -7,7 +7,7 @@
 #print "DEBUG: pltCmd=".pltCmd
 #print "DEBUG: pltTitle=".pltTitle
 #print "DEBUG: fileList=".fileList
-print "DEBUG: labelList=".labelList
+#print "DEBUG: labelList=".labelList
 
 load 'pt-set4time.gp'         # X-axis is time
 load 'pt-setTerm.gp'          # plot as PNG graphic

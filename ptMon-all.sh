@@ -39,92 +39,56 @@ outputTopDir=${1}
 cycle=${2}
 
 function mkDAQplots() {
+  local site="${1}"
 
-  # make "live" DAQ (raw, uncorrected PT-OT) plots
-  echo "Running pltDAQ for NU1..."
-  local site="NU1"
-  local outputDir="${outputTopDir}/NU1"
+  echo "Running ${cycle} pltDAQ for ${site}..."
+  local outputDir="${outputTopDir}/${site}"
+  if [ ! -d "${outputDir}" ]; then mkdir -p "${outputDir}"; fi
   local logFile="${outputDir}/ptMon.${site}.rawDAQ.log"
-  ptMon-pltDAQ.sh "${outputDir}" "NU1" "${cycle}" >"${logFile}" 2>&1 &
+  ptMon-pltDAQ.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
 
-  echo "Running pltDAQ for Super-K..."
-  site="Super-K"
-  outputDir="${outputTopDir}/SK"
-  logFile="${outputDir}/ptMon.${site}.rawDAQ.log"
-  ptMon-pltDAQ.sh "${outputDir}" "Super-K" "${cycle}" >"${logFile}" 2>&1 &
-
-  echo "...waiting..."
-  wait
-  echo "...done: exit code: $?"
 }
 
 function mkSatPlots() {
+  local site="${1}"
 
   # don't run live cycles for this data
   if [[ ${cycle} == live ]]; then return 0; fi
   
   # make plots of numbers of satellites used in PVT
-  echo "Running SV in PVT Plots for NU1..."
-  local site="NU1"
-  local outputDir="${outputTopDir}/NU1"
+  echo "Running SV in PVT Plots for ${site}..."
+  local outputDir="${outputTopDir}/${site}"
   local logFile="${outputDir}/ptMon.${site}.pvtSat.log"
-  ptMon-pvtSatNum.sh "${outputDir}" "NU1" "${cycle}" >"${logFile}" 2>&1 &
+  ptMon-pvtSatNum.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
 
-  echo "Running SV in PVT Plots for Super-K..."
-  site="Super-K"
-  outputDir="${outputTopDir}/SK"
-  logFile="${outputDir}/ptMon.${site}.pvtSat.log"
-  ptMon-pvtSatNum.sh "${outputDir}" "Super-K" "${cycle}" >"${logFile}" 2>&1 &
-
-  echo "...waiting..."
-  wait
-  echo "...done: exit code: $?"
 }
 
 function mkBiasPlots() {
+  local site="${1}"
 
   # don't run live cycles for this data
   if [[ ${cycle} == live ]]; then return 0; fi
   
   # make plots of numbers of satellites used in PVT
-  echo "Running rxClkBias Plots for NU1..."
-  local site="NU1"
-  local outputDir="${outputTopDir}/NU1"
+  echo "Running rxClkBias Plots for ${site}..."
+  local outputDir="${outputTopDir}/${site}"
   local logFile="${outputDir}/ptMon.${site}.rxClkBias.log"
-  ptMon-clkBias.sh "${outputDir}" "NU1" "${cycle}" >"${logFile}" 2>&1 &
+  ptMon-clkBias.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
 
-  echo "Running rxClkBias plots for Super-K..."
-  site="Super-K"
-  outputDir="${outputTopDir}/SK"
-  logFile="${outputDir}/ptMon.${site}.rxClkBias.log"
-  ptMon-clkBias.sh "${outputDir}" "Super-K" "${cycle}" >"${logFile}" 2>&1 &
-
-  echo "...waiting..."
-  wait
-  echo "...done: exit code: $?"
 }
 
 function mkRxLogs() {
+  local site="${1}"
   # pull receiver logs and store them with the plots
   # don't run live cycles for this data
   if [[ ${cycle} == live ]]; then return 0; fi
   local fileType="fetchLog"
 
-  local siteName="NU1"
-  echo "Pulling Receiver Logs for ${siteName} ..."
-  local outputDir="${outputTopDir}/NU1"
-  local logFile="${outputDir}/ptMon.${siteName}.${fileType}.log"
-  ptMon-fetchRxLog.sh "${outputDir}" "${siteName}" "${cycle}" >"${logFile}" 2>&1 &
+  echo "Pulling Receiver Logs for ${site} ..."
+  local outputDir="${outputTopDir}/${site}"
+  local logFile="${outputDir}/ptMon.${site}.${fileType}.log"
+  ptMon-fetchRxLog.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
 
-  siteName="Super-K"
-  echo "Pulling Receiver Logs for ${siteName} ..."
-  outputDir="${outputTopDir}/SK"
-  logFile="${outputDir}/ptMon.${siteName}.${fileType}.log"
-  ptMon-fetchRxLog.sh "${outputDir}" "${siteName}" "${cycle}" >"${logFile}" 2>&1 &
-
-  echo "...waiting..."
-  wait
-  echo "...done: exit code: $?"
 }
 
 ## Configuration ##
@@ -136,8 +100,15 @@ if [ ! -d "${outputTopDir}" ]; then echo "ERROR: cannot find log directory: ${ou
 #if [[ -z "$GNUPLOT_LIB" ]]; then GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB ; fi  # default GNUPLOT search path
 if ! which ptMon-pltDAQ.sh >/dev/null 2>&1 ; then echo "ERROR: cannot find ptMon-pltDAQ.sh" 1>&2; exit 1; fi
 
+renice 19 $$
 ## MAIN ##
-mkDAQplots # live, raw DAQ data (raw, uncorrected PT-OT measurements)
-mkSatPlots # PVT satellite numbers
-mkBiasPlots # RxClkBias
-mkRxLogs # Receiver Logs (i.e. PVTGeodetic Block Errors)
+for siteName in NU1 Super-K ND280; do
+#for siteName in ND280; do
+  mkDAQplots "${siteName}" # live, raw DAQ data (raw, uncorrected PT-OT measurements)
+  mkSatPlots "${siteName}" # PVT satellite numbers
+  mkBiasPlots "${siteName}" # RxClkBias
+  mkRxLogs "${siteName}" # Receiver Logs (i.e. PVTGeodetic Block Errors)
+  echo "...waiting..."
+  wait
+  echo "...done: exit code: $?"
+done
