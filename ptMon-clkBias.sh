@@ -47,7 +47,7 @@ commonRoot=/home/t2k/public_html/post/gpsgroup/ptdata/organizedData
 typeDir=pvtGeodetic
 siteList="NU1:${commonRoot}/${typeDir}/NU1SeptentrioGPS-PT00
 Super-K:${commonRoot}/${typeDir}/KenkyutoSeptentrioGPS-PT01
-ND280:${commonRoot}/${typeDir}/ND280SeptentrioGPS-TOKA
+ND280:${commonRoot}/${typeDir}/NM-ND280SeptentrioGPS-TOKA
 Trav:${commonRoot}/${typeDir}/TravSeptentrioGPS-PT04
 "
 daqFileNameExp='*pvtGeo*.dat.*'
