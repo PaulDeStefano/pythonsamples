@@ -56,7 +56,7 @@ function mkSatPlots() {
   if [[ ${cycle} == live ]]; then return 0; fi
   
   # make plots of numbers of satellites used in PVT
-  echo "Running SV in PVT Plots for ${site}..."
+  echo "Running ${cycle} SV in PVT Plots for ${site}..."
   local outputDir="${outputTopDir}/${site}"
   local logFile="${outputDir}/ptMon.${site}.pvtSat.log"
   ptMon-pvtSatNum.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
@@ -70,7 +70,7 @@ function mkBiasPlots() {
   if [[ ${cycle} == live ]]; then return 0; fi
   
   # make plots of numbers of satellites used in PVT
-  echo "Running rxClkBias Plots for ${site}..."
+  echo "Running ${cycle} rxClkBias Plots for ${site}..."
   local outputDir="${outputTopDir}/${site}"
   local logFile="${outputDir}/ptMon.${site}.rxClkBias.log"
   ptMon-clkBias.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
@@ -84,7 +84,7 @@ function mkRxLogs() {
   if [[ ${cycle} == live ]]; then return 0; fi
   local fileType="fetchLog"
 
-  echo "Pulling Receiver Logs for ${site} ..."
+  echo "Pulling ${cycle} Receiver Logs for ${site} ..."
   local outputDir="${outputTopDir}/${site}"
   local logFile="${outputDir}/ptMon.${site}.${fileType}.log"
   ptMon-fetchRxLog.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
