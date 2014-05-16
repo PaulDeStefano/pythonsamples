@@ -733,7 +733,7 @@ do
 
         dry*|--dry* )           dryrun="yes"; logMsg "NOTICE: dry-run, processing will be skipped"; shift;;
         debug*|--debug* )       DEBUG="yes"; shift;;
-        lz*|--lz* )             zProg="lzop"; zExt=".lzo" shift;;
+        lz*|--lz* )             zProg="lzop --best"; zExt=".lzo" shift;;
         gz*|--gz* )             zProg="gzip"; zExt=".gz" shift;;
         *)                      erex=${1}; shift;;
     esac
