@@ -43,6 +43,9 @@ function mkDAQplots() {
 
   echo "Running ${cycle} pltDAQ for ${site}..."
   local outputDir="${outputTopDir}/${site}"
+  if [ "{site}" = "Super-K" ]; then
+    outputDir="${outputTopDir}/SK"
+  fi
   if [ ! -d "${outputDir}" ]; then mkdir -p "${outputDir}"; fi
   local logFile="${outputDir}/ptMon.${site}.rawDAQ.log"
   ptMon-pltDAQ.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
@@ -58,6 +61,9 @@ function mkSatPlots() {
   # make plots of numbers of satellites used in PVT
   echo "Running ${cycle} SV in PVT Plots for ${site}..."
   local outputDir="${outputTopDir}/${site}"
+  if [ "{site}" = "Super-K" ]; then
+    outputDir="${outputTopDir}/SK"
+  fi
   local logFile="${outputDir}/ptMon.${site}.pvtSat.log"
   ptMon-pvtSatNum.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
 
@@ -72,6 +78,9 @@ function mkBiasPlots() {
   # make plots of numbers of satellites used in PVT
   echo "Running ${cycle} rxClkBias Plots for ${site}..."
   local outputDir="${outputTopDir}/${site}"
+  if [ "{site}" = "Super-K" ]; then
+    outputDir="${outputTopDir}/SK"
+  fi
   local logFile="${outputDir}/ptMon.${site}.rxClkBias.log"
   ptMon-clkBias.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
 
@@ -86,6 +95,9 @@ function mkRxLogs() {
 
   echo "Pulling ${cycle} Receiver Logs for ${site} ..."
   local outputDir="${outputTopDir}/${site}"
+  if [ "${site}" = "Super-K" ]; then
+    outputDir="${outputTopDir}/SK"
+  fi
   local logFile="${outputDir}/ptMon.${site}.${fileType}.log"
   ptMon-fetchRxLog.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
 
@@ -100,10 +112,11 @@ if [ ! -d "${outputTopDir}" ]; then echo "ERROR: cannot find log directory: ${ou
 #if [[ -z "$GNUPLOT_LIB" ]]; then GNUPLOT_LIB=/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB ; fi  # default GNUPLOT search path
 if ! which ptMon-pltDAQ.sh >/dev/null 2>&1 ; then echo "ERROR: cannot find ptMon-pltDAQ.sh" 1>&2; exit 1; fi
 
-renice 19 $$
+renice 19 $$ >/dev/null
+export TZ=UTC
 ## MAIN ##
 for siteName in NU1 Super-K ND280; do
-#for siteName in ND280; do
+#for siteName in ND280; do #DEBUG
   mkDAQplots "${siteName}" # live, raw DAQ data (raw, uncorrected PT-OT measurements)
   mkSatPlots "${siteName}" # PVT satellite numbers
   mkBiasPlots "${siteName}" # RxClkBias
