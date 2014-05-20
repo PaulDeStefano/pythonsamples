@@ -652,17 +652,18 @@ function processSBF() {
             } fi
 
             # put RINEX file in organized location
+            logMsg "NOTICE: compressing and storing RINEX data & logs..."
             for rinfile in ${rinexFile%O}*; do {
                 if [ ! "${doRIN}" = "yes" ]; then logMsg "NOTICE: doRIN!=yes, skipping any effort to update RINEX"; continue; fi
-                logMsg "NOTICE: compressing and storing RINEX data"
                 if [ ! -f "${rinfile}" ]; then {
                   logMsg "WARNING: cannot find RINEX file ${rinfile}, mkRin failed??"
                   continue
                 } fi
-                echo -n . 1>&2
+                /usr/bin/echo -n .
                 rinZ="${rinfile}.gz"
                 #eval rinStoreDir="${rinexDir}"
                 storeFile="${rinStoreDir}/${rinZ}"
+                logMsg "DEBUG: working ${rinfile} --> ${storeFile}"
                 if [ ! -d ${rinStoreDir} ]; then mkdir --parents ${rinStoreDir}; fi
                 if [[ "yes" = "${clobber}" || ! -e ${storeFile} ]]; then {
                     gzip -c ${rinfile} >${rinZ}
@@ -672,7 +673,7 @@ function processSBF() {
                     logMsg "WARNING: Refused to overwrite ${storeFile}.  (--noclobber used)"
                 } fi
             } done
-            logMsg "NOTICE: done."
+            logMsg "NOTICE: ...done."
 
             # rotate RINEX pointers to keep 3 days worth
             if [[ ! -z "${oldRINEX%O}" ]]; then [ -f ${oldRINEX} ] && rm ${oldRINEX%O}*; fi
