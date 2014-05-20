@@ -94,7 +94,12 @@ function doConfig() {
 
 function logMsg() {
     if [[ no == ${DEBUG} && ${1} =~ ^DEBUG ]]; then return 1; fi
-    echo "$@" 1>&2
+    if [[ ${1} =~ ^NOTICE ]]
+    then
+      echo "$@"
+    else
+      echo "$@" 1>&2
+    fi
 }
 
 function getRxName() {

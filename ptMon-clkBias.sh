@@ -68,7 +68,11 @@ trap '[[ -d ${tmpDir} ]] && rm -rf "${tmpDir}" ' EXIT 0
 function logMsg() {
   # do not print DEBUG messages if DEBUG=no
   [[ ${DEBUG} == no && ${1} =~ ^DEBUG: ]] && return 0
-  echo "$@" 1>&2
+  if [[ ${1} =~ ^NOTICE: ]]; then
+    echo "$@"
+  else
+    echo "$@" 1>&2
+  fi
 }
 
 function getLeastFiles()
