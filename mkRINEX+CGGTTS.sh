@@ -309,6 +309,8 @@ function mkCGG() {
     local cggFile=
     if [[ ${eCode} -eq 0 && -f CGGTTS.gps ]]; then
         cggFile="${cggTopDir}/${rxName}/${subDir}/CGGTTS.${id}.${typ}.yr${yr}.day${day}.mjd${mjd}"
+        if [[ ! yes == ${clobber} && -f ${cggFile} ]]; then logMsg "NOTICE: skipping CGGTTS production, clobber disabled & file exist: ${cggFile}"; rm -f "${cggParam}";return 0; fi
+
         local cggStoreDir=$(dirname ${cggFile})
         if [ ! -d ${cggStoreDir} ]; then mkdir --parents ${cggStoreDir}; fi
         logMsg "NOTICE: ...Done"
@@ -317,8 +319,10 @@ function mkCGG() {
         [[ -f CGGTTS.log ]] && mv CGGTTS.log "${cggFile}.log"
 
         logMsg "NOTICE: compressing CGGTTS data..."
+        [[ -f "${cggFile}.gps.gz" ]] && rm --force "${cggFile}.gps.gz"
         gzip -c ${cggFile}.gps >${cggFile}.gps.gz
         rm ${cggFile}.gps
+        [[ -f "${cggFile}.log.gz" ]] && rm --force "${cggFile}.log.gz"
         gzip -c ${cggFile}.log >${cggFile}.log.gz
         rm ${cggFile}.log
     else
