@@ -378,9 +378,9 @@ function storeData() {
   if [[ ! -d ${finalDir} ]]; then mkdir --parents ${finalDir}; fi
 
   chmod 444 "${dataFile}.${zExt}"
-  mv  "${dataFile}.${zExt}" "${finalDir}"/.
+  mv  --force "${dataFile}.${zExt}" "${finalDir}"/.
   chmod 444 "${logFile}.${zExt}"
-  mv  "${logFile}.${zExt}" "${finalDir}"/.
+  mv  --force "${logFile}.${zExt}" "${finalDir}"/.
 }
 
 # generic extraction using given python script
@@ -449,10 +449,10 @@ function mkReport() {
   logMsg "DEBUG: moving report file to ${finalDir}/${outfile}"
   if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile} ]]; then {
     chmod 444 "${outfile}.${zExt}"
-    mv  "${outfile}" "${finalDir}"/.
+    mv  --force "${outfile}" "${finalDir}"/.
     ${zProg} -c "${errfile}" >${errfile}.${zExt}
     chmod 444 "${errfile}.${zExt}"
-    mv  "${errfile}.${zExt}" "${finalDir}"/.
+    mv  --force "${errfile}.${zExt}" "${finalDir}"/.
   } else {
     logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.  (--noclobber used)"
   } fi
@@ -536,10 +536,10 @@ function mk3day() {
   if [[ "yes" = "${clobber}" || ! -e ${finalDir}/${outfile} ]]; then {
     ${zProg} -c "${outfile}" >${outfile}.${zExt}
     chmod 444 "${outfile}.${zExt}"
-    mv  "${outfile}.${zExt}" "${finalDir}"/.
+    mv  --force "${outfile}.${zExt}" "${finalDir}"/.
     ${zProg} -c "${errfile}" >${errfile}.${zExt}
     chmod 444 "${errfile}.${zExt}"
-    mv  "${errfile}.${zExt}" "${finalDir}"/.
+    mv  --force "${errfile}.${zExt}" "${finalDir}"/.
   } else {
     logMsg "WARNING: Refused to overwrite ${finalDir}/${outfile}.  (--noclobber used)"
   } fi
@@ -661,7 +661,7 @@ function processSBF() {
                 if [ ! -d ${rinStoreDir} ]; then mkdir --parents ${rinStoreDir}; fi
                 if [[ "yes" = "${clobber}" || ! -e ${storeFile} ]]; then {
                     gzip -c ${rinfile} >${rinZ}
-                    mv  ${rinZ} ${storeFile}
+                    mv  --force ${rinZ} ${storeFile}
                     chmod 444 "${storeFile}"
                 } else {
                     logMsg "WARNING: Refused to overwrite ${storeFile}.  (--noclobber used)"
