@@ -670,7 +670,7 @@ function processSBF() {
                   logMsg "WARNING: cannot find RINEX file ${rinfile}, mkRin failed??"
                   continue
                 } fi
-                /usr/bin/echo -n .
+                echo -n .
                 rinZ="${rinfile}.gz"
                 #eval rinStoreDir="${rinexDir}"
                 storeFile="${rinStoreDir}/${rinZ}"
