@@ -379,7 +379,7 @@ function mkPlotsFromFile()
     style="${styleSpec}"
   fi
 
-  style="points pt 12 pointsize 0.5" # debug
+  #style="points pt 12 pointsize 0.5" # debug
   # run plotter
   local gptCmds=''
   [[ ! -z ${startSpec} ]] && gptCmds=${gptCmds}'startTime="'${startTime}'";'
@@ -632,6 +632,9 @@ function mkPlots() {
   local endSpec="${2}"
   local siteName="${3}"
 
+  #reset list of result plots
+  pltTypeList=
+
   # get PPP data
   getSttnClkOffset "${startSpec}" "${endSpec}" "${siteName}" sttnClk.dat
   ##  plot just station clock value, while we have the data right here
@@ -650,7 +653,7 @@ function mkPlots() {
   #local currTime=$( date --utc --iso-8601=minutes)
   local currTime=$( date --utc )
   pltTitle="PT GPS (${siteName}), Rb - PPP GNSS Time: ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
-  mkPlotsFromFile "${labels}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points" "no" "yes"
+  mkPlotsFromFile "${labels}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points pointsize 0.5" "no" "yes"
   mv outfile.png outfile.clkns.png
   pltTypeList="clkns"
   rm *.dat # clean up copies made to sent to gnuplot
@@ -698,7 +701,7 @@ function mkPlots() {
   pltTitle="PT GPS (${siteName}), PT - OT (fully corrected): ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
   mkPlotsFromFile "${fullCorrLabelList}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points pt 12 pointsize 0.5" "no" "yes"
   mv outfile.png outfile.fullCorr.png
-  pltTypeList="fullCorr"
+  pltTypeList="${pltTypeList} fullCorr"
 
   # clean up
   for file in sttnClk.dat.* *.dat; do
