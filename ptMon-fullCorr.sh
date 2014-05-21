@@ -656,7 +656,7 @@ function mkPlots() {
   rm *.dat # clean up copies made to sent to gnuplot
   
   # check for ND280, no point in going further
-  if [ "${siteName}" = "" ]; then logMsg "NOTICE: skipping more work on ND280, no corrections can be calculated"; return 0 ; fi
+  if [ "${siteName}" = "ND280" ]; then logMsg "NOTICE: skipping more work on ND280, no corrections can be calculated"; return 0 ; fi
 
   # get xpps offset data
   getTOFDataFiles "${startSpec}" "${endSpec}" "${siteName}" xpps XPPS.dat
