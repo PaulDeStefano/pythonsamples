@@ -52,13 +52,14 @@ fileList=${tmpDir}/ptMon-filelist.$$
 unixTimeColumn=3
 dataColumn=2
 loadAvgLimit=11
+DEBUG=no
 
 # clean up working files on interupt or hangup
 trap '[[ -d ${tmpDir} ]] && rm -rf "${tmpDir}" ' EXIT 0
 
 function logMsg() {
   # do not print DEBUG messages if DEBUG=no
-  [[ ${DEBUG} == no && ${1} =~ ^DEBUG: ]] && return 0
+  [[ ${DEBUG} != yes && ${1} =~ ^DEBUG: ]] && return 0
   if [[ ${1} =~ ^NOTICE: ]]; then
     echo "$@"
   else
