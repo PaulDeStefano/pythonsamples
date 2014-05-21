@@ -109,7 +109,7 @@ fi
 fileList=${tmpDir}/ptMon-filelist.$$
 loadAvgLimit=11
 
-DEBUG=yes
+DEBUG=no
 origWD=${PWD}
 
 # clean up working files on interupt or hangup
@@ -537,7 +537,7 @@ function getTOFDataFiles() {
       # add the data file for that day, filtered by subtype, to the file list
       eval "fileGlob=./cRoot/${DataExtractDir[${dataType}]}/${d}/GPSData_Internal/${FileNameDataType[${dataType}]}*${dataSubType}*${mark}*.yr*${yr}.day${dayNum}*dat*"
       logMsg "DEBUG: getTOFDataFiles: finding files matchiing ${fileGlob}"
-      ls ${fileGlob} #DEBUG
+      #ls ${fileGlob} #DEBUG
       ls ${fileGlob} 2>/dev/null >> "${list}"
     done
     logMsg "DEBUG: getTOFDataFiles: found type:${dataType} files, first: $(head -n 1 ${list})" 
@@ -699,7 +699,7 @@ function mkPlots() {
   # plot all fully corrected results
   logMsg "NOTICE: plotting the following list of Post-Processing results: ${fullCorrLabelList}"
   pltTitle="PT GPS (${siteName}), PT - OT (fully corrected): ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
-  mkPlotsFromFile "${fullCorrLabelList}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points pt 12 pointsize 0.5" "no" "yes"
+  mkPlotsFromFile "${fullCorrLabelList}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points pointsize 0.5" "no" "yes"
   mv outfile.png outfile.fullCorr.png
   pltTypeList="${pltTypeList} fullCorr"
 
