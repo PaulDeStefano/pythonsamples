@@ -83,7 +83,8 @@ awkCmd[rxclk]="-F, '{print(int(\$2),sprintf(\"%.3f\",(\$7*10**6)))}'"
 # station clock offset (sttnClk_ns) data
 DataExtractDir[sttnClk]='organizedData/csrs-pp'
 FileNameDataType[sttnClk]='inhouse-pp'
-FileNameDataSubTypeList[sttnClk]='IGS-final IGS-rapid ESA-final ESA-rapid EMR-rapid EMR-final'
+FileNameDataSubTypeList[sttnClk]='ESA-rapid IGS-rapid ESA-rapid ESA-final IGS-final EMR-final'
+fileBrcXpr=$( echo ${FileNameDataSubTypeList[sttnClk]} | sed -r 's/ +/,/g' )  # required to propogate precidence of PPP results all the way to plotting, later data overplots ealier data
 FileEGrepOpts[sttnClk]='.*'
 FileHeaderLen[sttnClk]=8
 #useCSV[sttnClk]="no"
@@ -457,6 +458,11 @@ function getSttnClkOffset() {
   logMsg "DEBUG: getSttnClkOffset: FileNameDataSubTypeList:"${FileNameDataSubTypeList[sttnClk]}
   for pppType in ${FileNameDataSubTypeList[sttnClk]}; do
     >${pppType} # reset
+    if [[ "${finalOnly}" = yes && "${pppType}" != *final ]]
+    then 
+      logMsg "DEBUG: skipping non-final results: finalOnly=${finalOnly}"
+      continue
+    fi
     for ((i=0;i<${#dayList[*]};i++))
     do
       dayNum="${dayList[i]}"
@@ -639,7 +645,7 @@ function mkPlots() {
   getSttnClkOffset "${startSpec}" "${endSpec}" "${siteName}" sttnClk.dat
   ##  plot just station clock value, while we have the data right here
   local subType= labels= file=
-  for file in sttnClk.dat*; do
+  for file in $(eval echo sttnClk.dat.{${fileBrcXpr}}) ; do
     [ ! -s "${file}" ] && continue
     logMsg "DEBUG: mkPlots: got sttnClk file: ${file}"
     logMsg "DEBUG: mkPlots: sttnclk head: $(head -n 1 ${file})"
@@ -720,8 +726,10 @@ function mkLevel2() {
 }
 
 function mkLevel3() {
-  mkPlots "00:00 40 days ago" "00:00 3 days ago" "${siteName}"
+  #finalOnly=yes
+  mkPlots "00:00 5 weeks ago" "00:00 3 weeks ago" "${siteName}"
   storeResults "lngRng"
+  #finalOnly=no
 }
 
 ## MAIN ##
@@ -767,4 +775,6 @@ case "${cycle}" in
   da*|--da*)          mkLevel1; mkLevel2;;
 
   week*|--week*)      mkLevel1; mkLevel2; mkLevel3;;
+
+# week*|--week*)      mkLevel3;; #DEBUG
 esac
