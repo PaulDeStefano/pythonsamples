@@ -83,7 +83,7 @@ awkCmd[rxclk]="-F, '{print(int(\$2),sprintf(\"%.3f\",(\$7*10**6)))}'"
 # station clock offset (sttnClk_ns) data
 DataExtractDir[sttnClk]='organizedData/csrs-pp'
 FileNameDataType[sttnClk]='inhouse-pp'
-FileNameDataSubTypeList[sttnClk]='ESA-rapid IGS-rapid ESA-rapid ESA-final IGS-final EMR-final'
+FileNameDataSubTypeList[sttnClk]='ESA-rapid IGS-rapid EMR-rapid ESA-final IGS-final EMR-final'
 fileBrcXpr=$( echo ${FileNameDataSubTypeList[sttnClk]} | sed -r 's/ +/,/g' )  # required to propogate precidence of PPP results all the way to plotting, later data overplots ealier data
 FileEGrepOpts[sttnClk]='.*'
 FileHeaderLen[sttnClk]=8
@@ -575,13 +575,14 @@ function getTOFDataFiles() {
     cat "${list}" >>"${rmListFile}"  # keep track of files to clean-up
 
     # push data up to caller
-    mv "${datfile}" "${retFile}.${dataSubType}"
+    mv --force "${datfile}" "${retFile}.${dataSubType}"
   done
 
   # clean up
   for f in $( cat "${rmListFile}" ); do
     [ -e "${file}" ] && rm "${f}"
   done
+  return 0
 }
 
 function mergeAllFiles() {
@@ -696,7 +697,7 @@ function mkPlots() {
     # calculate
     >"fullCorr.dat.${lbl}"
     calcFullCorr "fullCorr.dat.${lbl}" merged.dat
-    if [ ! -s "fullCorr.dat.${lbl}" ]; then logMsg "ERROR: data final calculations failed for group l:${lbl}"; continue; fi
+    if [ ! -s "fullCorr.dat.${lbl}" ]; then logMsg "ERROR: data full correction calculations failed for group l:${lbl}"; continue; fi
     ln -s "fullCorr.dat.${lbl}" "${lbl}.dat"
     #cp -p fullCorr.dat.${lbl} /home/pdestefa/public_html/ptmon_test/. #DEBUG
     fullCorrLabelList="${fullCorrLabelList} ${lbl}"   # success, save label to pass to plotter, label
