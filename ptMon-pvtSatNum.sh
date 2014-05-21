@@ -106,11 +106,11 @@ function getLeastFiles()
 
     if [[ ${fileStartTime} -gt ${startTime} ]]; then {
       # all data in file is newer, need more history
-      #logMsg "DEBUG: beginning of file is after start time, going for more..."
+      logMsg "DEBUG: beginning of file is after start time, going for more..."
       :
     } else {
       # start of file is older than we need, stop looking for more history
-      #logMsg "DEBUG: ...beginning of file is earlier than start time, done."
+      logMsg "DEBUG: ...beginning of file is earlier than start time, done."
       break
     } fi
 
@@ -120,7 +120,7 @@ function getLeastFiles()
   # empty old file
   > "${fileList}"
   for f2 in ${filesToPlot}; do echo ${f2} >> ${fileList}; done
-  #logMsg "DEBUG: new filelist:" $(cat $fileList)
+  logMsg "DEBUG: new filelist:" $(cat $fileList)
 
   logMsg "NOTICE: ...done."
 }
@@ -159,7 +159,7 @@ function getDAQFileList() {
       break
     } fi
   } done
-  #logMsg "DEBUG: data dir: ${dir}"
+  logMsg "DEBUG: data dir: ${dir}"
   if [ ! -d "${dir}" ]; then {
     logMsg "WARNING: cannot find dir: ${dir}, trying original working dir: ${origWD}"
     dir=${origWD}
@@ -167,7 +167,7 @@ function getDAQFileList() {
 
   # find DAQ files in the directory
   #ls -t $( find ${dir} -name "${daqFileNameExp}" -type f -mtime ${mtimeSpec} ) > ${file}
-  find ${dir} -name "${daqFileNameExp}" -type f -mtime ${mtimeSpec} | sort > ${file}
+  find ${dir} -name "${daqFileNameExp}" -type f -mtime ${mtimeSpec} | sort | grep -v "day000" > ${file}
 }
 
 function deCompress() {
@@ -260,7 +260,7 @@ function mkPlots()
   #local currTime=$( date --utc --iso-8601=minutes)
   local currTime=$( date --utc )
   local pltTitle="Precise Time GPS Receiver (${site}), Satellites in PVT: ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
-  local style="points pointtype 2 linewidth 1 linecolor 2"
+  local style="points pointtype 1 pointsize 1 linecolor 2"
   # run plotter
   local gptCmds=''
   [[ ! -z ${startSpec} ]] && gptCmds=${gptCmds}'startTime="'${startTime}'";'
@@ -308,7 +308,7 @@ function storeResults() {
       moveFile="outfile${filePltType}png"
       if [[ ! -r "${tmpDir}/${moveFile}" ]]; then logMsg "WARNING: cannot find file to move, skipping: ${moveFile}"; continue; fi
       destFile="ptMon.${siteName}.${pltType}.${timeRange}${filePltType}png"
-      mv "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
+      mv --force "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
     done
 }
 

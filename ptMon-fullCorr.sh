@@ -34,47 +34,78 @@
 #   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #===============================================================================
 
-outputDir=${1}
-siteName=${2}
-cycle=${3}
+outputDir="${1}"
+siteName="${2}"
+cycle="${3}"
 
 # force process to run nice
 renice 20 -p ${$} >/dev/null
 
 # Mapping from PT site installation names to data directories
 pltType=pt-ot
-commonRoot=/home/t2k/public_html/post/gpsgroup/ptdata/organizedData
+commonRoot=/home/t2k/public_html/post/gpsgroup/ptdata
 typeDir=csrs-pp
 siteList="NU1:NU1SeptentrioGPS-PT00
 Super-K:KenkyutoSeptentrioGPS-PT01
-ND280:ND280SeptentrioGPS-TOKA
+ND280:NM-ND280SeptentrioGPS-TOKA
 Trav:TravSeptentrioGPS-PT04
 "
+siteListDAQDir="NU1:GPSPTNU1/*TIC/.
+Super-K:SUKRNH5/*TIC/.
+Trav:TRAVELLER-BOX/*TIC/.
+"
 
-dataTypeList=('xpps' 'sttnClk' 'daq')
+# fake associative arrays
+dataTypeList=('xpps' 'rxclk' 'sttnClk' 'daq')
+for (( dtIndx=0;dtIndx<=3;dtIndx++ )); do iName=${dataTypeList[$dtIndx]}; eval "${iName}=$dtIndx" ; done
+#xpps=0; rxclk=1; sttnClk=2; daq=3
 # xPPSOffset data
-FileNameExp['xpps']='*xppsoffset*.int.*.dat.*'
-FileExclude['xpps']='^ISO'
-FileHeaderLen['xpps']=1
-unixTimeColumn['xpps']=3
-dataColumn['xpps']=2
-useCSV['xpps']="CSV"
+DataExtractDir[xpps]='organizedData/xPPSOffsets'
+FileNameDataType[xpps]='xppsoffset'
+FileNameDataSubTypeList[xpps]='.'
+FileEGrepOpts[xpps]='.*'
+FileHeaderLen[xpps]=1
+unixTimeColumn[xpps]=3
+dataColumn[xpps]=2
+#useCSV[xpps]="CSV"
+awkCmd[xpps]="-F, '{print(int(\$3),\$2)}'"
+# rxClkBias data
+DataExtractDir[rxclk]='organizedData/pvtGeodetic'
+FileNameDataType[rxclk]='pvtGeo'
+FileNameDataSubTypeList[rxclk]='.'
+FileEGrepOpts[rxclk]='.*'
+FileHeaderLen[rxclk]=1
+unixTimeColumn[rxclk]=3
+dataColumn[rxclk]=2
+#useCSV[rxclk]="CSV"
+awkCmd[rxclk]="-F, '{print(int(\$2),sprintf(\"%.3f\",(\$7*10**6)))}'"
 # station clock offset (sttnClk_ns) data
-FileNameExp['sttnClk']='*{csrs,inhouse}-pp.*.int.*.tar.gz'
-FileExclude['sttnClk']='^FWD'
-FileHeaderLen['sttnClk']=8
-unixTimeColumn['sttnClk']=3
-dataColumn['sttnClk']=2
-useCSV['sttnClk']="no"
+# station clock offset (sttnClk_ns) data
+DataExtractDir[sttnClk]='organizedData/csrs-pp'
+FileNameDataType[sttnClk]='inhouse-pp'
+FileNameDataSubTypeList[sttnClk]='IGS-final IGS-rapid ESA-final ESA-rapid EMR-rapid EMR-final'
+FileEGrepOpts[sttnClk]='.*'
+FileHeaderLen[sttnClk]=8
+#useCSV[sttnClk]="no"
+#awkCmd[sttnClk]='{date=\$5;gsub("-"," ",date);hms=substr(\$6,1,8);gsub(":"," ",hms); tm=mktime(date " " hms);print(tm,\$14)}'
 # raw TIC data
-FileNameExp['daq']='*OT-PT*.dat.*'
-FileExclude['daq']=
-FileHeaderLen['daq']=0
-unixTimeColumn['daq']=3
-dataColumn['daq']=2
-useCSV['daq']="no"
+FileNameDataType[daq]='OT-PT'
+FileNameDataSubTypeList[daq]='.'
+FileEGrepOpts[daq]='.*'
+FileHeaderLen[daq]=0
+unixTimeColumn[daq]=3
+dataColumn[daq]=2
+#useCSV[daq]="no"
+#awkCmd[daq]="'{print(\$3,(\$2*10**9))}'"
 
-tmpDir=$(mktemp -d '/tmp/ptMon-tmp.XXXXX')
+#for iName in ${dataTypeList[*]}; do echo "DEBUG: $iName-->${FileNameDataType[$iName]}"; done #DEBUG
+#exit 1 #DEBUG
+
+tmpDir=$(mktemp -d '/tmp/ptMon-tmp.XXXXXXXXX')
+if [ ! $? -eq 0 ]; then
+  echo "ERROR: cannot create temporary directory with mktemp"
+  exit 1
+fi
 fileList=${tmpDir}/ptMon-filelist.$$
 loadAvgLimit=11
 
@@ -118,8 +149,23 @@ function siteNameToMarker() {
   local len=${#marker}
   local indx=$((${len} - 4))
   local marker="${dir:$indx:4}"
-  logMsg "DEBUG: found marker name: site=${siteName},marker=${marker}"
+  logMsg "DEBUG: siteNameToDir: found marker name: site=${siteName},marker=${marker}"
   eval "$retVar=\${marker}"
+}
+
+function siteNameToDAQDir() {
+  local retVar="${1}"
+  local siteName="${2}"
+
+  for word in ${siteListDAQDir}; do {
+    if [[ ${word} =~ ^${siteName} ]]; then {
+      dir=${word##*:}
+      break
+    } fi
+  } done
+
+  logMsg "DEBUG: siteNameToDAQDir: found directory: site=${siteName},dir=${dir}"
+  eval "$retVar=\${dir}"
 }
 
 function getLeastFiles()
@@ -202,73 +248,108 @@ function getLeastFilesByName()
 
 }
 
+function findFiles() {
+  local findDir="${1}"
+  local startSpec="${2}"
+  local endSpec="${3}"
+  local findOpts="${4}"
+  local grepFilter="${5}"
+  local retFile="${6}"
+
+# convert time specs to UNIX time and reference files for 'find'
+  local UNIXstart=$(date --date="${startSpec}" +%s)
+  local UNIXend=$(date --date="${endSpec}" +%s)
+  touch --date="@${UNIXstart}" "startTimeFile"
+  touch --date="@${UNIXend}" "endTimeFile"
+
+# Use find first
+  #DEBUG eval find ${findDir} ${findOpts} 2>/dev/null | \
+  eval find ${findDir} -newer startTimeFile -a ! -newer endTimeFile ${findOpts} 2>/dev/null | \
+  egrep "${grepFilter}" | \
+  cat > "${retFile}"
+}
+
 function getDAQFileList() {
   # file DAQ files for the specified site, store in specified file
-  local siteName=$1
-  local file=$2
+  local siteName="$1"
+  local file="$2"
+  local startSpec="${3}"
+  local endSpec="${4}"
 
   # dereference site to directory
   local dir=""
-  siteNameToDir dir "${siteName}"
+  siteNameToDAQDir dir "${siteName}"
+  dir="./cRoot/${dir}"
   logMsg "DEBUG: data dir: ${dir}"
-  if [ ! -d "${dir}" ]; then {
-    logMsg "WARNING: cannot find dir: ${dir}, trying original working dir: ${origWD}"
-    dir=${origWD}
-  } fi
 
-  # find DAQ files in the directory
-  #ls -t $( find ${dir} -name "${daqFileNameExp}" -type f -mtime ${mtimeSpec} ) > ${file}
-  find ${dir} -name "${daqFileNameExp}" -type f -mtime ${mtimeSpec} | sort > ${file}
+  findFiles "${dir}" "${startSpec}" "${endSpec}" "-name \*OT-PT\*.dat" '.*' "${file}"
+  if [ ! -s "${file}" ]; then logMsg "WARNING: findFiles returned zero files"; return 1; fi
 }
 
 function deCompress() {
   # use appropriate utility to un-compress data file
   local fileList=${1}
+  logMsg "DEBUG: deCompress: working on files in ${fileList}, first file: $(head -n 1 ${fileList})"
 
   # file to replace FileList after decompression
   local newList="${tmpDir}/deCompList"
 
+  local file= base= ext= cmd= tgt=
   for file in $( cat "${fileList}" ); do {
 
     # assume filename typing
-    local base=$(basename ${file})
-    local ext="${base##*.}"
-    local origName="${base%.${ext}}"
-    local outFile="${tmpDir}/${origName}"
-
+    base=$(basename ${file})
+    ext="${base##*.}"
+    tgt="${base%%.${ext}}"
+    
+    if [ -s "${tgt}" ]; then 
+      logMsg "DEBUG: deCompress: decompressed file already exists:${tgt}, skipping"
+      echo "${tgt}" >> "${newList}"
+      continue
+    fi
+    if [ ! -e "./${base}" ]; then ln -s "${file}" "${base}"; fi # make a fast copy of file in CWD
     # choose decompression comand
-    local cmd=""
     case ${ext} in
-      lzo*)       cmd="$(which lzop) -dc ${file}" ;;
-      gz*)        cmd="$(which gzip) -dc ${file}" ;;
-      zip*)       cmd="$(which zip) -c ${file} ${origName}" ;;
+      lzo*)       cmd="$(which lzop) -d \"${base}\"" ;;
+      gz*)        cmd="$(which gzip) -dc \"${base}\" >${tgt}" ;;
+      zip*)       cmd="$(which zip) -d \"${base}\"" ;;
+      dat*)       logMsg "NOTICE: deCompress: extension:${ext}, matches dat*, skipping decompression"; continue ;;
+      *)          logMsg "ERROR: deCompress: unrecognized extention ${ext}"; return 1 ;;
     esac
 
-    logMsg "DEBUG: decompressing: ${file} -> ${outFile} ..."
-    eval ${cmd} | egrep -v "${daqFileExclude}" > "${outFile}"
-    logMsg "DEBUG: head of file: $(head -n 1 ${outFile})"
-    if [ ${?} -ge 1 ]; then logMsg "ERROR: unable to decompress file: ${file}"; exit 1; fi
+    logMsg "DEBUG: decompressing:${base},cmd:${cmd},tgt:${tgt}..."
+    eval ${cmd}
+    if [ ${?} -ge 1 -o ! -r "${tgt}" ]; then logMsg "ERROR: unable to decompress file: ${file}"; continue; fi
     logMsg "DEBUG: ...done."
-
-    # store file
-    echo "${outFile}" >> "${newList}"
-
+    echo "${tgt}" >> "${newList}"
   } done
 
-  mv "${newList}" "${fileList}"
-
+  [ -s "${newList}" ] && mv --force "${newList}" "${fileList}"
 }
 
 function getDAQfiles() {
-  getDAQFileList "${site}" "${fileList}"
-  #logMsg "DEBUG: " $(head -n 3 ${fileList})
-  if [ -z "$(head -n 1 ${fileList})" ]; then {
+  local site="${1}"
+  local startSpec="${2}"
+  local endSpec="${3}"
+  local datFile="${4}"
+
+  local fileList="getDAQfiles.list"
+  >"${fileList}"
+  getDAQFileList "${site}" "${fileList}" "${startSpec}" "${endSpec}"
+  logMsg "DEBUG: getDAQfiles: head of filelist: $(head -n 1 ${fileList})"
+  if [ ! -s "${fileList}" ]; then {
     # no files, failure
-    logMsg "ERROR: unable to find any ${pltType} files in directory ${dir}, skipping"
+    logMsg "ERROR: getDAQfiles: unable to find any DAQ files, returning early"
     return 1
-  } else {
-    logMsg "NOTICE: found files for plotting ${pltType}."
   } fi
+
+  local file=
+  >getDAQ.dat
+  for file in $(cat "${fileList}" ); do
+    eval awk "'{print(\$${unixTimeColumn[daq]},\$${dataColumn[daq]}*10**9)}'" <"${file}" >>getDAQ.dat
+    #eval awk "'\$${dataColumn[daq]} <= 0.9{print(\$${unixTimeColumn[daq]},\$${dataColumn[daq]}*10**9)}'" <"${file}" >>getDAQ.dat
+  done
+  sort -n -k 1 getDAQ.dat >"${datFile}"
 }
 
 function mkPlotsFromFile()
@@ -292,10 +373,13 @@ function mkPlotsFromFile()
   local filesToPlot=
   local style=
   if [ -z "${styleSpec}" ]; then 
-    style="points pointtype 1 linewidth 2 linecolor 3"
+    #style="points pointtype 1 linewidth 2 linecolor 3"
+    style="style2"
   else
     style="${styleSpec}"
   fi
+
+  style="points pt 12 pointsize 0.5" # debug
   # run plotter
   local gptCmds=''
   [[ ! -z ${startSpec} ]] && gptCmds=${gptCmds}'startTime="'${startTime}'";'
@@ -312,7 +396,7 @@ function mkPlotsFromFile()
     gptCmds=${gptCmds}'fileList="'${filesToPlot}'";'
   fi
   gptCmds=${gptCmds}'outFile="'${tmpDir}/outfile'";'
-  gptCmds=${gptCmds}'pltCmd="'${xCol}':'${yCol}'";'
+  gptCmds=${gptCmds}'pltCmd="'${xCol}':'${yCol}':(10)";'
   gptCmds=${gptCmds}'pltTitle="'${pltTitle}'";'
   gptCmds=${gptCmds}'styleExt="'${style}'";'
   gptCmds=${gptCmds}'useCSV="'${useCSV}'";'
@@ -330,28 +414,9 @@ function storeResults() {
       moveFile="outfile.${filePltType}.png"
       if [[ ! -r "${tmpDir}/${moveFile}" ]]; then logMsg "WARNING: cannot find file to move, skipping: ${moveFile}"; continue; fi
       destFile="ptMon.${siteName}.${filePltType}.${timeRange}.png"
-      mv "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
+      mv --force "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
+      chmod 444 "${outputDir}/${destFile}"
     done
-}
-
-function findFiles() {
-  local findDir="${1}"
-  local startSpec="${2}"
-  local endSpec="${3}"
-  local findOpts="${4}"
-  local grepFilter="${5}"
-  local sortOpt="${6}"
-
-# convert time specs to UNIX time and reference files for 'find'
-  local UNIXstart=$(date --date="${startSpec}" +%s)
-  local UNIXend=$(date --date="${startSpec}" +%s)
-  touch --date="@${UNIXstart}" "startTimeFile"
-  touch --date="@${UNIXend}" "endTimeFile"
-
-# Use find first
-  find "${findDir}" -newer startTimeFile -a ! -newer endTimeFile ${findOpts} | \
-  egrep "${grepFilter}" | \
-  sort "${sortOpt}"
 }
 
 function timeSpecToDayAndYearNums() {
@@ -378,65 +443,188 @@ function timeSpecToDayAndYearNums() {
   eval "$retYr_A=(\${years})"
 }
 
-function getSttnClkoffset() {
+function getSttnClkOffset() {
   local startSpec="${1}"
   local endSpec="${2}"
   local siteName="${3}"
   local retFile="${4}"
 
-#  findFiles "${commonRoot}/csrs-pp" "@0" "now" "-name inhouse-pp*${siteName}*yr${yr}*" > fileList
-  local d= mark= dayList= dayNum= yrList= yr=
+  local d= mark= dayList= dayNum= yrList= yr= pppType=
   siteNameToDir d "${siteName}"
   siteNameToMarker mark "${siteName}"
   timeSpecToDayAndYearNums dayList yrList "${startSpec}" "${endSpec}"
-  logMsg "DEBUG: getSttnClkoffset: #dayList=${#dayList[*]}"
-  >final # reset
-  >rapid
-  for ((i=0;i<${#dayList[*]};i++))
-  do
-    dayNum="${dayList[i]}"
-    yr="${yrList[i]}"
-    #ls ./cRoot/csrs-pp/${d}/GPSData_Internal/inhouse-pp*final*${mark}*yr${yr}*day${dayNum}* 2>/dev/null >> final
-    ls ./cRoot/csrs-pp/${d}/GPSData_Internal/inhouse-pp*final*${mark}*yr${yr}*day${dayNum}* >> final ##DEBUG
-    #ls ./cRoot/csrs-pp/${d}/GPSData_Internal/inhouse-pp*rapid*${mark}*yr${yr}*day${dayNum}* 2>/dev/null >> rapid
-    ls ./cRoot/csrs-pp/${d}/GPSData_Internal/inhouse-pp*rapid*${mark}*yr${yr}*day${dayNum}* >> rapid ##DEBUG
-  done
+  logMsg "DEBUG: getSttnClkOffset: #dayList=${#dayList[*]}"
+  logMsg "DEBUG: getSttnClkOffset: FileNameDataSubTypeList:"${FileNameDataSubTypeList[sttnClk]}
+  for pppType in ${FileNameDataSubTypeList[sttnClk]}; do
+    >${pppType} # reset
+    for ((i=0;i<${#dayList[*]};i++))
+    do
+      dayNum="${dayList[i]}"
+      yr="${yrList[i]}"
+      yr=${yr:2:2}
+      # for label in labelList; do
+      ls ./cRoot/organizedData/csrs-pp/${d}/GPSData_Internal/inhouse-pp*src${pppType}*${mark}*.yr*${yr}.day${dayNum}* 2>/dev/null >> "${pppType}"
+      #ls ./cRoot/organizedData/csrs-pp/${d}/GPSData_Internal/inhouse-pp*${pppType}*${mark}*yr*${yr}*day${dayNum}* >> "${pppType}" ##DEBUG
+    done
 
-  logMsg "DEBUG: first in rapid list: $(head -n 1 rapid)"
-  logMsg "DEBUG: first in final list: $(head -n 1 final)"
-
-  # iterate over final and rapid
-    #awk '{hms=substr($6,1,8); printf("%sT%s %.3f\n",$5,hms,$14)}' | \
-  local FRU=
-  for FRU in "rapid" "final"; do
-    # check
-    if [ ! -s "${FRU}" ]; then
-      logMsg "DEBUG: no ${FRU} PPP files found for range ${startSpec} -- ${endSpec}"
+    if [ ! -s "${pppType}" ]; then
+      logMsg "DEBUG: no ${pppType} PPP files found for range ${startSpec} -- ${endSpec}"
       continue
     fi
+    logMsg "DEBUG: first in ${pppType} list: $(head -n 1 ${pppType})"
+    logMsg "DEBUG: last in ${pppType} list: $(tail -n 1 ${pppType})"
 
     # decompress files
-    for file in $(cat $FRU); do
-      tar zxvf "${file}" "*.pos" "*.sum" pppTimeOfLastMaintenance
+    for file in $(cat ${pppType}); do
+      tar zxf "${file}" "*.pos" "*.sum" pppTimeOfLastMaintenance
     done
     # extract data bits
     tail -n +9 *.pos | \
     grep ^BWD | \
     awk '{date=$5;gsub("-"," ",date);hms=substr($6,1,8);gsub(":"," ",hms); tm=mktime(date " " hms);print(tm,$14)}' | \
-    sort -n -k 1 > $FRU.clkns
-    logMsg "DEBUG: head of ${FRU}.clkns file: $(head -n 1 ${FRU}.clkns)"
+    sort -n -k 1 > $pppType.clkns
+    logMsg "DEBUG: head of ${pppType}.clkns file: $(head -n 1 ${pppType}.clkns)"
     # TODO: pull last update of yrly file
     # TODO: pull estimated position from .sum file
 
     # push data up to caller
-    mv "${FRU}.clkns" "${retFile}.${FRU}"
+    mv "${pppType}.clkns" "${retFile}.${pppType}"
 
     # clean up
     local file=
-    for file in *.pos *.sum pppTimeOfLastMaintenance ${FRU} ; do
+    for file in *.pos *.sum pppTimeOfLastMaintenance ${pppType} ; do
       [ -e "${file}" ] && rm "${file}"
     done
   done # end loop over rapid/final
+}
+
+function getTOFDataFiles() {
+  local startSpec="${1}"
+  local endSpec="${2}"
+  local siteName="${3}"
+  local dataType="${4}"
+  local retFile="${5}"
+
+  # check Required Configuration
+  local value
+  for var in DataExtractDir FileNameDataSubTypeList FileNameDataType FileHeaderLen FileEGrepOpts awkCmd ; do
+    value=
+    eval "value=\${${var}[${dataType}]}"
+    if [[ -z $value ]]; then logMsg "ERROR: getTOFDataFiles: file empty: ${var[$dataType]} is empty"; return 1; fi
+  done
+
+  local subTypeList="${FileNameDataSubTypeList[${dataType}]}"
+  logMsg "DEBUG: getTOFDataFiles: processing dataType:${dataType}, subtypes:${subTypeList}"
+  local d= mark= dayList= dayNum= yrList= yr=
+  siteNameToDir d "${siteName}"
+  siteNameToMarker mark "${siteName}"
+  timeSpecToDayAndYearNums dayList yrList "${startSpec}" "${endSpec}"
+  logMsg "DEBUG: getTOFDataFiles: #dayList=${#dayList[*]}"
+
+  local dataSubType= datfile=getTOF.dat f= list=getTOFDataFiles.list tmplist="${list}.tmp"
+  local rmListFile=getTOF.rmlist fileGlob=
+  >"${rmListFile}"
+  for dataSubType in ${subTypeList}; do
+    >"$list" # reset the file list
+    >"${tmplist}"
+    # for each data subtype...
+    logMsg "DEBUG: getTOFDataFiles: working on type:${dataType} dataSubType:${dataSubType}"
+    for ((i=0;i<${#dayList[*]};i++))
+    do # for very day in the date range
+      dayNum="${dayList[i]}"
+      yr="${yrList[i]}"
+      yr=${yr:2:2}
+      # add the data file for that day, filtered by subtype, to the file list
+      eval "fileGlob=./cRoot/${DataExtractDir[${dataType}]}/${d}/GPSData_Internal/${FileNameDataType[${dataType}]}*${dataSubType}*${mark}*.yr*${yr}.day${dayNum}*dat*"
+      logMsg "DEBUG: getTOFDataFiles: finding files matchiing ${fileGlob}"
+      ls ${fileGlob} #DEBUG
+      ls ${fileGlob} 2>/dev/null >> "${list}"
+    done
+    logMsg "DEBUG: getTOFDataFiles: found type:${dataType} files, first: $(head -n 1 ${list})" 
+    logMsg "DEBUG: getTOFDataFiles: found type:${dataType} files, last: $(tail -n 1 ${list})" 
+    logMsg "DEBUG: getTOFDataFiles: convert to local symlinks, type:${dataType}, first file: $(head -n 1 ${list})" 
+    # now we have a file list for this data type and subtype, make local links
+    local baseName=
+    for f in $(cat "${list}"); do 
+      bName=$(basename ${f})
+      if [ ! -s "${bName})" ]; then
+        ln -s --force ${f} ${bName}; echo ${bName} >>"${tmplist}"
+      else
+        echo ${bName} >>"${tmplist}"
+      fi
+    done
+    mv "${tmplist}" "${list}"
+    # decompress all the data files in the list, if necesary
+    deCompress "${list}"
+    # now pull the data out of the files and organize it for plotting
+    >"${datfile}"
+    for f in $(cat "${list}" )
+    do
+      tail -n +$((${FileHeaderLen[${dataType}]}+1)) ${f} | \
+      egrep "${FileEGrepOpts[${dataType}]}" | \
+      eval awk ${awkCmd[${dataType}]} | \
+      cat >> "${datfile}"
+    done
+    logMsg "DEBUG: getTOFDataFiles: done collecting data for type:${dataType}, first data line: $(head -n 1 ${datfile})" 
+    cat "${list}" >>"${rmListFile}"  # keep track of files to clean-up
+
+    # push data up to caller
+    mv "${datfile}" "${retFile}.${dataSubType}"
+  done
+
+  # clean up
+  for f in $( cat "${rmListFile}" ); do
+    [ -e "${file}" ] && rm "${f}"
+  done
+}
+
+function mergeAllFiles() {
+  local retFile="${1}"; shift
+  local firstFile="${1}"; shift
+  cp -p "${firstFile}" resultFile
+  local fileList="${@}"
+
+  logMsg "DEBUG: mergeAllFiles: merging files:${firstFile},${fileList} "
+  local f=
+  for f in ${fileList}; do
+    logMsg "DEBUG: mergeAllFiles: head of resultFile: $(head -n 1 resultFile)"
+    logMsg "DEBUG: mergeAllFiles: head of ${f}: $(head -n 1 ${f})"
+    #join -j 1 resultFile "${f}"  |head #DEBUG
+    join -j 1 resultFile "${f}" >mergeTempFile
+    if [ ! $? -eq 0 -o ! -s mergeTempFile ]; then
+      logMsg "ERROR: mergeAllFiles: join failed on file:${f},output head:$(head -n 1 mergeTempFile)"
+      >resultFile
+      return 1
+    else
+      mv mergeTempFile resultFile
+      logMsg "DEBUG: mergeAllFiles: head of merged file: $(head -n 1 resultFile)"
+    fi
+  done
+  mv resultFile "${retFile}"
+}
+
+function calcFullCorr() {
+  local retFile="${1}"
+  local datFile="${2}"
+  local siteName="${3}"
+
+  cblDelayDiff['Super-K']=-22.02  # before Kenkyuto Move
+  cblDelayDiff['Super-K']=-14.77  # after Kenkyuto Move
+  cblDelayDiff['NU1']=-18.23      # before 2014-2-4
+  cblDelayDiff['NU1']=-19.86      # after 2014-2-4
+  arbitraryShift=-300.0           # PT time retarded by 300ns to force TIC measurements away from zero
+
+  logMsg "DEBUG: starting full correction calculations: cblDelayDiff=${cblDelayDiff[${siteName}]}, shift=${arbitraryShift}..."
+  # assume datFile order is unixtime,TICraw,xPPSOffset,rxClkBias,SttnClkOffset
+  local cblDD=cblDelayDiff[${siteName}]
+  local shft=${arbitraryShift}
+  local setUpCmd="unix=\$1;tic=\$2;xpps=\$3;rcb=\$4;sco=\$5;shft=${shft}"
+  #eval fcCmd="'{${setUpCmd};fcorr=tic-(xpps)-(shft)-(cblDD)+(rcb)-(sco);print(unix,fcorr,tic,xpps,rcb,sco,cblDD,shft)}'"
+  #/usr/bin/echo "#UNIXtime fullcorr TICmeas xPPSOff RxClkBias SttnClkOff" >"${retFile}"
+  eval fcCmd="'{${setUpCmd};fcorr=tic+(shft)-(xpps)-(cblDD)+(rcb)-(sco);print(unix,fcorr)}'"
+
+  awk "${fcCmd}" <"${datFile}" >"${retFile}"
+  logMsg "DEBUG: ...done"
 }
 
 function mkPlots() {
@@ -445,7 +633,7 @@ function mkPlots() {
   local siteName="${3}"
 
   # get PPP data
-  getSttnClkoffset "${startSpec}" "${endSpec}" "${siteName}" sttnClk.dat
+  getSttnClkOffset "${startSpec}" "${endSpec}" "${siteName}" sttnClk.dat
   ##  plot just station clock value, while we have the data right here
   local subType= labels= file=
   for file in sttnClk.dat*; do
@@ -453,7 +641,7 @@ function mkPlots() {
     logMsg "DEBUG: mkPlots: got sttnClk file: ${file}"
     logMsg "DEBUG: mkPlots: sttnclk head: $(head -n 1 ${file})"
     subType=${file##*.}
-    ln -s --force "${file}" "${subType}.dat"
+    ln --force "${file}" "${subType}.dat"
     # setup filenames that mach label names for sending to gnuplot, see pt-plotgen.plt
     labels="${labels} ${subType}"
     logMsg "DEBUG: found labels: ${labels}"
@@ -461,15 +649,56 @@ function mkPlots() {
   if [[ -z ${labels} ]]; then logMsg "ERROR coun't find any PPP data at all"; return 1; fi
   #local currTime=$( date --utc --iso-8601=minutes)
   local currTime=$( date --utc )
-  pltTitle="PT GPS (${site}), Rb - GNSS Time (PPP-${subType}): ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
-  mkPlotsFromFile "${labels}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "with points" "no" "yes"
+  pltTitle="PT GPS (${siteName}), Rb - PPP GNSS Time: ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
+  mkPlotsFromFile "${labels}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points" "no" "yes"
   mv outfile.png outfile.clkns.png
   pltTypeList="clkns"
+  rm *.dat # clean up copies made to sent to gnuplot
   
+  # check for ND280, no point in going further
+  if [ "${siteName}" = "" ]; then logMsg "NOTICE: skipping more work on ND280, no corrections can be calculated"; return 0 ; fi
+
   # get xpps offset data
+  getTOFDataFiles "${startSpec}" "${endSpec}" "${siteName}" xpps XPPS.dat
+  if [ ! $? -eq 0 ]; then logMsg "ERROR: mkPlots: getting xPPSOffset data failed; cannot continue"; return 1; fi
+  logMsg "DEBUG: got head of XPPS: $(head -n 1 XPPS.dat..)"
+
+  # get rxClkBias data
+  getTOFDataFiles "${startSpec}" "${endSpec}" "${siteName}" rxclk rxClkBias.dat
+  if [ ! $? -eq 0 ]; then logMsg "ERROR: mkPlots: getting rxClkBias data failed; cannot continue"; return 1; fi
+  logMsg "DEBUG: got head of rxclk: $(head -n 1 rxClkBias.dat..)"
+
   # get DAQ data
-# combine
-# plot
+  getDAQfiles "${siteName}" "${startSpec}" "${endSpec}" DAQ.dat
+  if [ ! $? -eq 0 -a -s DAQ.dat ]; then logMsg "ERROR: mkPlots: getting DAQ data failed; cannot continue"; return 1; fi
+  logMsg "DEBUG: got head of DAQ: $(head -n 1 DAQ.dat)"
+
+  local lbl= fullCorrLabelList=
+  for lbl in ${labels}; do
+    # combine
+    logMsg "DEBUG: got head of DAQ: $(head -n 1 DAQ.dat)"
+    logMsg "DEBUG: got head of XPPS: $(head -n 1 XPPS.dat..)"
+    logMsg "DEBUG: got head of rxclk: $(head -n 1 rxClkBias.dat..)"
+    logMsg "DEBUG: got head of sttnClk: $(head -n 1 sttnClk.dat.${lbl})"
+    >merged.dat
+    mergeAllFiles merged.dat DAQ.dat XPPS.dat.. rxClkBias.dat.. "sttnClk.dat.${lbl}"
+    if [ ! $? -eq 0 -o ! -s merged.dat ]; then logMsg "ERROR: data merge failed for group l:${lbl}"; continue; fi
+    logMsg "DEBUG: finished merging data, head: $(head -n 1 merged.dat) "
+    # calculate
+    >"fullCorr.dat.${lbl}"
+    calcFullCorr "fullCorr.dat.${lbl}" merged.dat
+    if [ ! -s "fullCorr.dat.${lbl}" ]; then logMsg "ERROR: data final calculations failed for group l:${lbl}"; continue; fi
+    ln -s "fullCorr.dat.${lbl}" "${lbl}.dat"
+    #cp -p fullCorr.dat.${lbl} /home/pdestefa/public_html/ptmon_test/. #DEBUG
+    fullCorrLabelList="${fullCorrLabelList} ${lbl}"   # success, save label to pass to plotter, label
+  done
+
+  # plot all fully corrected results
+  logMsg "NOTICE: plotting the following list of Post-Processing results: ${fullCorrLabelList}"
+  pltTitle="PT GPS (${siteName}), PT - OT (fully corrected): ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
+  mkPlotsFromFile "${fullCorrLabelList}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points pt 12 pointsize 0.5" "no" "yes"
+  mv outfile.png outfile.fullCorr.png
+  pltTypeList="fullCorr"
 
   # clean up
   for file in sttnClk.dat.* *.dat; do
@@ -478,17 +707,17 @@ function mkPlots() {
 }
 
 function mkLevel1() {
-  mkPlots "00:00 4 days ago" "00:00 2 days ago" "${siteName}"
+  mkPlots "00:00 5 days ago" "00:00 3 days ago" "${siteName}"
   storeResults "shrtRng"
 }
 
 function mkLevel2() {
-  mkPlots "00:00 9 days ago" "00:00 2 days ago" "${siteName}"
+  mkPlots "00:00 9 days ago" "00:00 3 days ago" "${siteName}"
   storeResults "medRng"
 }
 
 function mkLevel3() {
-  mkPlots "00:00 31 days ago" "00:00 2 days ago" "${siteName}"
+  mkPlots "00:00 40 days ago" "00:00 3 days ago" "${siteName}"
   storeResults "lngRng"
 }
 
@@ -496,12 +725,12 @@ function mkLevel3() {
 
 # Configuration && Checks
 set -e
-if [ -z "${cycle}" ]; then logMsg "ERROR: third parameter, cycle, required but missing."; exit 1; fi
-if [ -z "${siteName}" ]; then logMsg "ERROR: second parameter, site name, required but missing."; exit 1; fi
 if [ -z "${outputDir}" ]; then logMsg "ERROR: first parameter, output directory, required but missing."; exit 1; fi
 if [ ! -d "${outputDir}" ]; then logMsg "ERROR: cannot find output directory: ${outputDir}"; exit 1; fi
+if [ -z "${siteName}" ]; then logMsg "ERROR: second parameter, site name, required but missing."; exit 1; fi
+if [ -z "${cycle}" ]; then logMsg "ERROR: third parameter, cycle, required but missing."; exit 1; fi
 pltProg="$(which gnuplot)"
-if [ ! -e ${pltProg} ]; then logMsg "ERROR: cannot find gnuplot in PATH"; exit 1; fi
+if [ ! -e "${pltProg}" ]; then logMsg "ERROR: cannot find gnuplot in PATH"; exit 1; fi
 
 if [[ -z "${GNUPLOT_LIB}" ]]; then
   #GNUPLOT_LIB=${GNUPLOT_LIB}:/home/t2k/ptgps-processing/scripts/pythonsamples/gnuplot.d; export GNUPLOT_LIB

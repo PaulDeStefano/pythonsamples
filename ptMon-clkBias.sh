@@ -106,11 +106,11 @@ function getLeastFiles()
 
     if [[ ${fileStartTime} -gt ${startTime} ]]; then {
       # all data in file is newer, need more history
-      #logMsg "DEBUG: beginning of file is after start time, going for more..."
+      logMsg "DEBUG: beginning of file is after start time, going for more..."
       :
     } else {
       # start of file is older than we need, stop looking for more history
-      #logMsg "DEBUG: ...beginning of file is earlier than start time, done."
+      logMsg "DEBUG: ...beginning of file is earlier than start time, done."
       break
     } fi
 
@@ -120,7 +120,7 @@ function getLeastFiles()
   # empty old file
   > "${fileList}"
   for f2 in ${filesToPlot}; do echo ${f2} >> ${fileList}; done
-  #logMsg "DEBUG: new filelist:" $(cat $fileList)
+  logMsg "DEBUG: new filelist:" $(cat $fileList)
 
   logMsg "NOTICE: ...done."
 }
@@ -161,7 +161,7 @@ function getDAQFileList() {
       break
     } fi
   } done
-  #logMsg "DEBUG: data dir: ${dir}"
+  logMsg "DEBUG: data dir: ${dir}"
   if [ ! -d "${dir}" ]; then {
     logMsg "WARNING: cannot find dir: ${dir}, trying original working dir: ${origWD}"
     dir=${origWD}
@@ -218,7 +218,7 @@ function mkPlots()
   local site=$4      # date specification
 
   getDAQFileList "${site}" "${fileList}"
-  #logMsg "DEBUG: " $(head -n 3 ${fileList})
+  logMsg "DEBUG: " $(head -n 3 ${fileList})
   if [ -z "$(head -n 1 ${fileList})" ]; then {
     # no files, failure
     logMsg "ERROR: unable to find any ${pltType} files in directory ${dir}, skipping"
@@ -241,7 +241,7 @@ function mkPlots()
   #local currTime=$( date --utc --iso-8601=minutes)
   local currTime=$( date --utc )
   local pltTitle="PT GPS (${site}), Rubidium - GNSS Time (rxClkBias): ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
-  local style="points pointtype 1 linewidth 2 linecolor 3"
+  local style="points pointtype 12 pointsize 0.5 linecolor 3"
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
   local gptCmds=''
@@ -269,7 +269,7 @@ function storeResults() {
       moveFile="outfile${filePltType}png"
       if [[ ! -r "${tmpDir}/${moveFile}" ]]; then logMsg "WARNING: cannot find file to move, skipping: ${moveFile}"; continue; fi
       destFile="ptMon.${siteName}.${pltType}.${timeRange}${filePltType}png"
-      mv "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
+      mv --force "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
     done
 }
 

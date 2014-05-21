@@ -37,8 +37,12 @@ if ( exists( "yTitle" ) ) {
 } 
 set grid
 set macros
+set key opaque
+set key inside left
 style1 = "points pointtype 1 linewidth 2 linecolor 1"
-style2 = "points pointtype 1 pointsize 1 linecolor 1"
+style2 = "points pointtype 12 pointsize 1 linecolor 1"
+styleF1 = "circles"
+styleF2 = "dots"
 if ( exist( "styleExt" ) ) { 
   style3 = styleExt
 } else {
@@ -47,9 +51,14 @@ if ( exist( "styleExt" ) ) {
 #print "DEBUG: using style=".style3
 
 if( exists("labelList") ) {
-  print "DEBUG: using label list"
-  plot for [t in labelList ] t.".dat" using @pltCmd @style3 title t
+  #print "DEBUG: using label list"
+  if( exists("fillAlpha") ) {
+    set style fill transparent solid fillAlpha noborder
+    plot for [t in labelList ] t.".dat" using @pltCmd with @styleF1 title t
+  } else {
+    plot for [t in labelList ] t.".dat" using @pltCmd with @style3 title t
+  }
 } else {
-  print "DEBUG: using file list"
+  #print "DEBUG: using file list"
   plot for [f in fileList] f using @pltCmd with @style3 title ''
 }

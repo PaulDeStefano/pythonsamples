@@ -57,7 +57,13 @@ loadAvgLimit=11
 trap '[[ -d ${tmpDir} ]] && rm -rf "${tmpDir}" ' EXIT 0
 
 function logMsg() {
-echo "$@" 1>&2
+  # do not print DEBUG messages if DEBUG=no
+  [[ ${DEBUG} == no && ${1} =~ ^DEBUG: ]] && return 0
+  if [[ ${1} =~ ^NOTICE: ]]; then
+    echo "$@"
+  else
+    echo "$@" 1>&2
+  fi
 }
 
 function getLeastFiles()
@@ -75,7 +81,7 @@ function getLeastFiles()
     # file that preceeds the start time.  Note all files between then and now.
 
     local fileStartTime=$( head -n 3 ${daqFile} | tail -n -1 | awk '{print $'${col}'}' )
-    #logMsg "DEBUG: file start time: ${fileStartTime}"
+    logMsg "DEBUG: file start time: ${fileStartTime}"
     if [[ -z ${fileStartTime} ]]; then {
       logMsg "ERROR: cannot find start time in DAQ file: ${daqFile}"; exit 1
     } fi
@@ -85,11 +91,11 @@ function getLeastFiles()
 
     if [[ ${fileStartTime} -gt ${startTime} ]]; then {
       # all data in file is newer, need more history
-      #logMsg "DEBUG: beginning of file is after start time, going for more..."
+      logMsg "DEBUG: beginning of file is after start time, going for more..."
       :
     } else {
       # start of file is older than we need, stop looking for more history
-      #logMsg "DEBUG: ...beginning of file is earlier than start time, done."
+      logMsg "DEBUG: ...beginning of file is earlier than start time, done."
       break
     } fi
 
@@ -99,7 +105,7 @@ function getLeastFiles()
   # empty old file
   > "${fileList}"
   for f2 in ${filesToPlot}; do echo ${f2} >> ${fileList}; done
-  #logMsg "DEBUG: new filelist:" $(cat $fileList)
+  logMsg "DEBUG: new filelist:" $(cat $fileList)
 
   logMsg "NOTICE: ...done."
 }
@@ -117,7 +123,7 @@ function getDAQFileList() {
       break
     } fi
   } done
-  #logMsg "DEBUG: data dir: ${dir}"
+  logMsg "DEBUG: data dir: ${dir}"
 
   # find DAQ files in the directory
   ls -t $( find ${dir} -name "${daqFileNameExp}" -type f -mtime ${mtimeSpec} ) > ${file}
@@ -131,7 +137,7 @@ function mkPlots()
   local site=$4      # date specification
 
   getDAQFileList "${site}" "${fileList}"
-  #logMsg "DEBUG: " $(head -n 3 ${fileList})
+  logMsg "DEBUG: " $(head -n 3 ${fileList})
   if [ -z "$(head -n 1 ${fileList})" ]; then {
     # no files, failure
     logMsg "ERROR: unable to find any DAQ files in directory ${dir}, skipping"
@@ -149,7 +155,7 @@ function mkPlots()
   #local currTime=$( date --utc --iso-8601=minutes)
   local currTime=$( date --utc )
   local pltTitle="TIC Measurement (uncorrected) (${site}): ${startSpec} -- ${endSpec}\nplot created ${currTime}"
-  local style="points pointtype 1 linewidth 1 linecolor 1"
+  #local style="points pointtype 1 linewidth 1 linecolor 1"
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
   local gptCmds='startTime="'${startTime}'";'
@@ -159,7 +165,7 @@ function mkPlots()
   gptCmds=${gptCmds}'pltTitle="'${pltTitle}'";'
   gptCmds=${gptCmds}'fileList="'${filesToPlot}'"'
   #gptCmds=${gptCmds}'styleExt="'${styleName}'"'
-  #logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
+  logMsg "DEBUG: using gnuplot comands: " "${gptCmds}"
   logMsg "NOTICE: $(date --rfc-3339=seconds): making plots...: ${pltTitle}"
   gnuplot -e "${gptCmds}" pt-plotgen.gpt
   #gnuplot -e 'startTime="'${startTime}'";outFile="'${tmpDir}'";pltCmd="using '${unixTimeColumn}':$('${dataColumn}'*10**9)";pltTitle="test title";fileList="'$file'"' gnuplot.d/pt-plotgen.gpt
@@ -176,7 +182,7 @@ function storeResults() {
       moveFile="outfile${filePltType}png"
       if [[ ! -r "${tmpDir}/${moveFile}" ]]; then logMsg "WARNING: cannot find file to move, skipping: ${moveFile}"; continue; fi
       destFile="ptMon.${siteName}.${pltType}.${timeRange}${filePltType}png"
-      mv "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
+      mv --force "${tmpDir}/${moveFile}" "${outputDir}/${destFile}"
     done
 }
 

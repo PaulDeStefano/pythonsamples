@@ -43,7 +43,7 @@ function mkDAQplots() {
 
   echo "Running ${cycle} pltDAQ for ${site}..."
   local outputDir="${outputTopDir}/${site}"
-  if [ "{site}" = "Super-K" ]; then
+  if [ "${site}" = "Super-K" ]; then
     outputDir="${outputTopDir}/SK"
   fi
   if [ ! -d "${outputDir}" ]; then mkdir -p "${outputDir}"; fi
@@ -61,7 +61,7 @@ function mkSatPlots() {
   # make plots of numbers of satellites used in PVT
   echo "Running ${cycle} SV in PVT Plots for ${site}..."
   local outputDir="${outputTopDir}/${site}"
-  if [ "{site}" = "Super-K" ]; then
+  if [ "${site}" = "Super-K" ]; then
     outputDir="${outputTopDir}/SK"
   fi
   local logFile="${outputDir}/ptMon.${site}.pvtSat.log"
@@ -78,7 +78,7 @@ function mkBiasPlots() {
   # make plots of numbers of satellites used in PVT
   echo "Running ${cycle} rxClkBias Plots for ${site}..."
   local outputDir="${outputTopDir}/${site}"
-  if [ "{site}" = "Super-K" ]; then
+  if [ "${site}" = "Super-K" ]; then
     outputDir="${outputTopDir}/SK"
   fi
   local logFile="${outputDir}/ptMon.${site}.rxClkBias.log"
@@ -103,6 +103,22 @@ function mkRxLogs() {
 
 }
 
+function mkFullCorr() {
+  local site="${1}"
+  # pull receiver logs and store them with the plots
+  # don't run live cycles for this data
+  if [[ ${cycle} == live ]]; then return 0; fi
+  local fileType="fullCorr"
+
+  echo "Calculating and plotting ${cycle} Full Corrections for ${site} ..."
+  local outputDir="${outputTopDir}/${site}"
+  if [ "${site}" = "Super-K" ]; then
+    outputDir="${outputTopDir}/SK"
+  fi
+  local logFile="${outputDir}/ptMon.${site}.${fileType}.log"
+  ptMon-fullCorr.sh "${outputDir}" "${site}" "${cycle}" >"${logFile}" 2>&1 &
+
+}
 ## Configuration ##
 
 if [ -z "${cycle}" ]; then echo "ERROR: parameter #2 required, cycle type" 1>&2; exit 1; fi
@@ -121,6 +137,7 @@ for siteName in NU1 Super-K ND280; do
   mkSatPlots "${siteName}" # PVT satellite numbers
   mkBiasPlots "${siteName}" # RxClkBias
   mkRxLogs "${siteName}" # Receiver Logs (i.e. PVTGeodetic Block Errors)
+  mkFullCorr "${siteName}" # Receiver Logs (i.e. PVTGeodetic Block Errors)
   echo "...waiting..."
   wait
   echo "...done: exit code: $?"
