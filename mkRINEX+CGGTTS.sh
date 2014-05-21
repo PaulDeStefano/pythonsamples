@@ -106,6 +106,7 @@ function getRxName() {
   local id=${1}
   local yr=${2}
   local day=${3}
+  local retVar="${4}"
   #logMsg "DEBUG: yr${yr} day${day}"
 
   if [ -z "${day}" ]; then { logMsg "ERROR: getRxName requires 3rd parameter"; exit 1; } fi
@@ -135,7 +136,7 @@ PT04:TravelerGPS-PT04"
     } fi
   } done
   if [ -z "${value}" ]; then logMsg "ERROR: couldn't find match for ${id}"; exit 1; fi
-  echo "${value}"
+  eval "${retVar}=\${value}"
 }
 
 function getSBF() {
@@ -144,6 +145,8 @@ function getSBF() {
     local extraRegex=${3}
     local beginT=${4}
     local endT=${5}
+    local retFile="${6}"
+
     logMsg "NOTICE: working on element ${element}"
 
     # create comparison files for find
@@ -164,7 +167,7 @@ function getSBF() {
         | egrep -i "${extraRegex}" \
         | fgrep -v /old/ \
         | sort \
-    )
+    ) >"${retFile}"
 
 }
 
@@ -258,11 +261,13 @@ function mkCGG() {
     local prev=${1}
     local curr=${2}
     local id=${3}
-    local rxName=$( getRxName "${id}" ${yr} ${day} )
     local subDir=${4}
     local typ=${5}
     local day=${6}
     local yr=${7}
+
+    local rxName=
+    getRxName "${id}" ${yr} ${day} rxName
 
     if [[ ! yes == ${doCGG} ]]; then logMsg "NOTICE: skipping CGGTTS production."; return 0; fi
     #logMsg "NOTICE: Working on RINEX/CGGTTS data for id ${id}, day ${day}, year 20${yr}"
@@ -343,7 +348,7 @@ function mkCGG() {
     logMsg "NOTICE: ...done."
 
     rmList=$(ls rinex_* CGGTTS.* ${cggParam} 2>/dev/null)
-    echo Removing files: ${rmList}
+    logMsg "DEBUG: Removing files: ${rmList}"
     rm ${rmList}
 }
 
@@ -392,13 +397,15 @@ function storeData() {
 function sbfExtract() {
   local sbfFile="${1}"
   local id=${2}
-  local rxName=$( getRxName "${id}" ${yr} ${day} )
   local element=${3}
   local typ=${4}
   local yr=${5}
   local day=${6}
   local part=${7}
   local blkType=${8}
+
+  local rxName=
+  getRxName "${id}" ${yr} ${day} rxName
 
   local doType="do${blkType}"
   local progType="sbf2${blkType}"
@@ -428,7 +435,6 @@ function mkReport() {
 # make a report using the sbfanalyzer program and templates
   local sbfFile="${1}"
   local id=${2}
-  local rxName=$( getRxName "${id}" ${yr} ${day} )
   local element=${3}
   local typ=${4}
   local yr=${5}
@@ -438,6 +444,9 @@ function mkReport() {
   local reportDir=${9}
   local reportFileName=${10}
   local doReport=${11}
+
+  local rxName=
+  getRxName "${id}" ${yr} ${day} rxName
 
   if [[ ! "yes" = ${doReport} ]]; then logMsg "NOTICE: skipping report generation."; return 0; fi
   logMsg "NOTICE: running report ${reportTemplate##*/}"
@@ -567,7 +576,7 @@ function processSBF() {
         prevRINEX=""
         oldRINEX=""
 
-        getSBF ${element} ${id} "${erex}" "${beginTime}" "${endTime}" > "${sbfFileList}"
+        getSBF ${element} ${id} "${erex}" "${beginTime}" "${endTime}" "${sbfFileList}"
         while read file; do {
             logMsg "NOTICE: working on SBF file: ${file}"
 
@@ -588,7 +597,9 @@ function processSBF() {
             local part=${3}
             local yr=${4}
 
-            local rxName=$( getRxName "${id}" ${yr} ${day} ${yr} ${day} )
+            local rxName=
+            getRxName "${id}" ${yr} ${day} rxName
+
             logMsg "DEBUG: basename=${basename},unzipped=${unzipped},currSBF=${currSBF},rinexFile=${rinexFile},element=${element},id=${id},rxName=${rxName},typ=${typ},day=${day},part=${part},yr=${yr}"
             if [[ "yes" = "${dryrun}" ]]; then logMsg "NOTICE: DRY-RUN, skipping processing."; continue; fi
 
