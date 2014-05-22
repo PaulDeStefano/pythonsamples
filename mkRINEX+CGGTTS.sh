@@ -162,7 +162,7 @@ function getSBF() {
     ( /usr/bin/find ${sbfTopDir}/sukrnh5/DATA ${sbfTopDir}/gpsptnu1/DATA ${sbfTopDir}/triptgsc/nd280data ${sbfTopDir}/traveller-box \
         -type f \
         -iwholename "*${element}*${id}*.??_*" \
-        -newer "${beginFile}" -a \! -newer "${endFile}" \
+        -cnewer "${beginFile}" -a \! -cnewer "${endFile}" \
         2>/dev/null \
         | egrep -i "${extraRegex}" \
         | fgrep -v /old/ \
