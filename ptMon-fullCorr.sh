@@ -169,51 +169,64 @@ function siteNameToDAQDir() {
   eval "$retVar=\${dir}"
 }
 
+function dateStrToUNIXtime() {
+  local dateStr="${1}"
+  local retVar="${2}"
+
+  local unixTime=$(date --date="${dateStr}" +%s)
+  eval "${retVar}=\${unixTime}"
+}
+
+
 function getLeastFiles()
 {
-  local fileList=$1       # list of files to check
-  local startTime=$2      # oldest UNIXtime  to search for
-  local endTime=$3      # newest UNIXtime to search for
-  local col=$4            # column to check
+  local fileList="$1"       # list of files to check
+  local startTime="$2"      # oldest UNIXtime  to search for
+  local endTime="$3 "       # newest UNIXtime to search for
+  local col="$4"            # column to check
+  local useCSV="${5}"       # 'CSV' means assume CSV format
 
-  logMsg "NOTICE: pruning files..."
+  logMsg "NOTICE: getLeastFiles: pruning files:col=${col},useCSV=${useCSV}..."
+  logMsg "NOTICE: getLeastFiles: pruning files:startTime=${startTime},endTime=${endTime}..."
   #local tmpFile=${tmpDir}/ptMon-tmp.$$
 
   local filesToPlot=""
   for daqFile in $( cat ${fileList} ); do {
     # go each file.  pick only files that contain useful data
 
-    local fileStartTime=
-    if [ ${useCSV} == "CSV" ]; then {
+    local fileStartTime= fileEndTime=
+    if [ "${useCSV}" = "CSV" ]; then {
       fileStartTime=$( head -n 3 ${daqFile} | tail -n 1 | awk -F',' '{print $'${col}'}' )
     } else {
       fileStartTime=$( head -n 3 ${daqFile} | tail -n 1 | awk '{print $'${col}'}' )
     } fi
-    logMsg "DEBUG: file start time: ${fileStartTime}"
+    logMsg "DEBUG: getLeastFiles: file start time: ${fileStartTime}"
     if [[ -z ${fileStartTime} ]]; then {
-      logMsg "ERROR: cannot find start time in DAQ file: ${daqFile}"; exit 1
+      logMsg "ERROR: getLeastFiles: cannot find start time in DAQ file: ${daqFile}"; return 1
     } fi
-    local fileEndTime=
-    if [ ${useCSV} == "CSV" ]; then {
+    if [ "${useCSV}" = "CSV" ]; then {
       fileEndTime=$( tail -n 1 ${daqFile} | awk -F',' '{print $'${col}'}' )
     } else {
-    fileEndTime=$( tail -n 1 ${daqFile} | awk '{print $'${col}'}' )
+      fileEndTime=$( tail -n 1 ${daqFile} | awk '{print $'${col}'}' )
     } fi
-    logMsg "DEBUG: file end time: ${fileEndTime}"
+    logMsg "DEBUG: getLeastFiles: file end time: ${fileEndTime}"
     if [[ -z ${fileEndTime} ]]; then {
-      logMsg "ERROR: cannot find start time in DAQ file: ${daqFile}"; exit 1
+      logMsg "ERROR: getLeastFiles: cannot find start time in DAQ file: ${daqFile}"; return 1
     } fi
 
     if [[ ${fileStartTime} -gt ${endTime} ]]; then {
       # exclude file, too new
+      logMsg "DEBUG: getLeastFiles: excluding file ${daqFile}: too new"
       continue
     } fi
     if [[ ${fileEndTime} -lt ${startTime} ]]; then {
       # exclde file, too old
+      logMsg "DEBUG: getLeastFiles: excluding file ${daqFile}: too old"
       continue
     } fi
     
     # okay, add to list of plot files
+    logMsg "DEBUG: getLeastFiles: includeing file ${daqFile}: just right"
     filesToPlot="${filesToPlot} ${daqFile}"
   } done
 
@@ -224,6 +237,7 @@ function getLeastFiles()
   #logMsg "DEBUG: new filelist:" $(cat $fileList)
 
   logMsg "NOTICE: ...done."
+  return 0
 }
 
 function getLeastFilesByName()
@@ -263,9 +277,11 @@ function findFiles() {
   touch --date="@${UNIXstart}" "startTimeFile"
   touch --date="@${UNIXend}" "endTimeFile"
 
+  logMsg "DEBUG: findFiles: startTimeFile:" $(date --reference=startTimeFile)
+  logMsg "DEBUG: findFiles: endTimeFile:" $(date --reference=endTimeFile)
 # Use find first
   #DEBUG eval find ${findDir} ${findOpts} 2>/dev/null | \
-  eval find ${findDir} -newer startTimeFile -a ! -newer endTimeFile ${findOpts} 2>/dev/null | \
+  eval find ${findDir} -type f -newer startTimeFile -a ! -newer endTimeFile ${findOpts} 2>/dev/null | \
   egrep "${grepFilter}" | \
   cat > "${retFile}"
 }
@@ -283,14 +299,23 @@ function getDAQFileList() {
   dir="./cRoot/${dir}"
   logMsg "DEBUG: data dir: ${dir}"
 
-  findFiles "${dir}" "${startSpec}" "${endSpec}" "-name \*OT-PT\*.dat" '.*' "${file}"
+  findFiles "${dir}" "${startSpec}" "now" "-a -name \*OT-PT\*.dat" '.*' "${file}"
   if [ ! -s "${file}" ]; then logMsg "WARNING: findFiles returned zero files"; return 1; fi
+
+  local uStart= uEnd=
+  dateStrToUNIXtime "${startSpec}" "uStart"
+  dateStrToUNIXtime "${endSpec}" "uEnd"
+  getLeastFiles "${file}" "${uStart}" "${uEnd}" 3
+  if [ ! "$?" -eq 0 -o ! -s "${file}" ]; then logMsg "WARNING: getLeastFiles returned zero files"; return 1; fi
+
+  return 0
 }
 
 function deCompress() {
   # use appropriate utility to un-compress data file
   local fileList=${1}
   logMsg "DEBUG: deCompress: working on files in ${fileList}, first file: $(head -n 1 ${fileList})"
+  logMsg "DEBUG: deCompress: working on files in ${fileList}, last file: $(tail -n 1 ${fileList})"
 
   # file to replace FileList after decompression
   local newList="${tmpDir}/deCompList"
@@ -338,6 +363,7 @@ function getDAQfiles() {
   >"${fileList}"
   getDAQFileList "${site}" "${fileList}" "${startSpec}" "${endSpec}"
   logMsg "DEBUG: getDAQfiles: head of filelist: $(head -n 1 ${fileList})"
+  logMsg "DEBUG: getDAQfiles: tail of filelist: $(tail -n 1 ${fileList})"
   if [ ! -s "${fileList}" ]; then {
     # no files, failure
     logMsg "ERROR: getDAQfiles: unable to find any DAQ files, returning early"
@@ -351,6 +377,8 @@ function getDAQfiles() {
     #eval awk "'\$${dataColumn[daq]} <= 0.9{print(\$${unixTimeColumn[daq]},\$${dataColumn[daq]}*10**9)}'" <"${file}" >>getDAQ.dat
   done
   sort -n -k 1 getDAQ.dat >"${datFile}"
+  logMsg "DEBUG: head of DAQ file ${datFile}: " $(head -n 1 "${datFile}")
+  logMsg "DEBUG: tail of DAQ file ${datFile}: " $(tail -n 1 "${datFile}")
 }
 
 function mkPlotsFromFile()
@@ -487,14 +515,20 @@ function getSttnClkOffset() {
     # extract data bits
     tail -n +9 *.pos | \
     grep ^BWD | \
-    awk '{date=$5;gsub("-"," ",date);hms=substr($6,1,8);gsub(":"," ",hms); tm=mktime(date " " hms);print(tm,$14)}' | \
+    awk '{date=$5;gsub("-"," ",date);hms=substr($6,1,8);gsub(":"," ",hms); tm=mktime(date " " hms);print(tm-16,$14)}' | \
     sort -n -k 1 > $pppType.clkns
     logMsg "DEBUG: head of ${pppType}.clkns file: $(head -n 1 ${pppType}.clkns)"
+    logMsg "DEBUG: tail of ${pppType}.clkns file: $(tail -n 1 ${pppType}.clkns)"
     # TODO: pull last update of yrly file
     # TODO: pull estimated position from .sum file
 
     # push data up to caller
-    mv "${pppType}.clkns" "${retFile}.${pppType}"
+    #mv "${pppType}.clkns" "${retFile}.${pppType}"
+    logMsg "NOTICE: sorting sttnClk..."
+    sort -n -k 1 "${pppType}.clkns" > "${retFile}.${pppType}"
+    logMsg "NOTICE: ...done"
+    logMsg "DEBUG: head of sttnClk file ${retFile}.${pppType}: " $(head -n 1 "${retFile}.${pppType}")
+    logMsg "DEBUG: tail of sttnClk file ${retFile}.${pppType}: " $(tail -n 1 "${retFile}.${pppType}")
 
     # clean up
     local file=
@@ -502,6 +536,7 @@ function getSttnClkOffset() {
       [ -e "${file}" ] && rm "${file}"
     done
   done # end loop over rapid/final
+  return 0
 }
 
 function getTOFDataFiles() {
@@ -575,7 +610,13 @@ function getTOFDataFiles() {
     cat "${list}" >>"${rmListFile}"  # keep track of files to clean-up
 
     # push data up to caller
-    mv --force "${datfile}" "${retFile}.${dataSubType}"
+    logMsg "NOTICE: sorting TOF data file..."
+    sort -n -k 1 "${datfile}" > "${retFile}.${dataSubType}"
+    logMsg "NOTICE: ...done"
+    logMsg "DEBUG: head of file ${retFile}.${dataSubType}: " $(head -n 1 "${retFile}.${dataSubType}")
+    logMsg "DEBUG: tail of file ${retFile}.${dataSubType}: " $(tail -n 1 "${retFile}.${dataSubType}")
+
+    #mv --force "${datfile}" "${retFile}.${dataSubType}"
   done
 
   # clean up
@@ -588,14 +629,18 @@ function getTOFDataFiles() {
 function mergeAllFiles() {
   local retFile="${1}"; shift
   local firstFile="${1}"; shift
-  cp -p "${firstFile}" resultFile
   local fileList="${@}"
 
   logMsg "DEBUG: mergeAllFiles: merging files:${firstFile},${fileList} "
+  cp -p "${firstFile}" resultFile
   local f=
   for f in ${fileList}; do
-    logMsg "DEBUG: mergeAllFiles: head of resultFile: $(head -n 1 resultFile)"
     logMsg "DEBUG: mergeAllFiles: head of ${f}: $(head -n 1 ${f})"
+    #logMsg "DEBUG: sorting file to merge..."
+    #sort -n -k 1 "${f}" > mergeSortTmp
+    #mv mergeSortTmp "${f}"
+    logMsg "DEBUG: ...done"
+    #logMsg "DEBUG: mergeAllFiles: new head of ${f}: $(head -n 1 ${f})"
     #join -j 1 resultFile "${f}"  |head #DEBUG
     join -j 1 resultFile "${f}" >mergeTempFile
     if [ ! $? -eq 0 -o ! -s mergeTempFile ]; then
@@ -605,6 +650,7 @@ function mergeAllFiles() {
     else
       mv mergeTempFile resultFile
       logMsg "DEBUG: mergeAllFiles: head of merged file: $(head -n 1 resultFile)"
+      logMsg "DEBUG: mergeAllFiles: tail of merged file: $(tail -n 1 resultFile)"
     fi
   done
   mv resultFile "${retFile}"
@@ -650,6 +696,7 @@ function mkPlots() {
     [ ! -s "${file}" ] && continue
     logMsg "DEBUG: mkPlots: got sttnClk file: ${file}"
     logMsg "DEBUG: mkPlots: sttnclk head: $(head -n 1 ${file})"
+    logMsg "DEBUG: mkPlots: sttnclk tail: $(tail -n 1 ${file})"
     subType=${file##*.}
     ln --force "${file}" "${subType}.dat"
     # setup filenames that mach label names for sending to gnuplot, see pt-plotgen.plt
@@ -660,9 +707,9 @@ function mkPlots() {
   #local currTime=$( date --utc --iso-8601=minutes)
   local currTime=$( date --utc )
   pltTitle="PT GPS (${siteName}), Rb - PPP GNSS Time: ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
-  mkPlotsFromFile "${labels}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points pointsize 0.5" "no" "yes"
-  mv outfile.png outfile.clkns.png
-  pltTypeList="clkns"
+  DEBUG mkPlotsFromFile "${labels}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points pointsize 0.5" "no" "yes"
+  DEBUG mv outfile.png outfile.clkns.png
+  DEBUG pltTypeList="clkns"
   rm *.dat # clean up copies made to sent to gnuplot
   
   # check for ND280, no point in going further
@@ -671,17 +718,22 @@ function mkPlots() {
   # get xpps offset data
   getTOFDataFiles "${startSpec}" "${endSpec}" "${siteName}" xpps XPPS.dat
   if [ ! $? -eq 0 ]; then logMsg "ERROR: mkPlots: getting xPPSOffset data failed; cannot continue"; return 1; fi
-  logMsg "DEBUG: got head of XPPS: $(head -n 1 XPPS.dat..)"
 
   # get rxClkBias data
   getTOFDataFiles "${startSpec}" "${endSpec}" "${siteName}" rxclk rxClkBias.dat
   if [ ! $? -eq 0 ]; then logMsg "ERROR: mkPlots: getting rxClkBias data failed; cannot continue"; return 1; fi
-  logMsg "DEBUG: got head of rxclk: $(head -n 1 rxClkBias.dat..)"
 
   # get DAQ data
   getDAQfiles "${siteName}" "${startSpec}" "${endSpec}" DAQ.dat
   if [ ! $? -eq 0 -a -s DAQ.dat ]; then logMsg "ERROR: mkPlots: getting DAQ data failed; cannot continue"; return 1; fi
+
+# some checks
+  logMsg "DEBUG: got head of XPPS: $(head -n 1 XPPS.dat..)"
+  logMsg "DEBUG: got tail of XPPS: $(tail -n 1 XPPS.dat..)"
+  logMsg "DEBUG: got head of rxclk: $(head -n 1 rxClkBias.dat..)"
+  logMsg "DEBUG: got tail of rxclk: $(tail -n 1 rxClkBias.dat..)"
   logMsg "DEBUG: got head of DAQ: $(head -n 1 DAQ.dat)"
+  logMsg "DEBUG: got tail of DAQ: $(tail -n 1 DAQ.dat)"
 
   local lbl= fullCorrLabelList=
   for lbl in ${labels}; do
@@ -775,7 +827,6 @@ case "${cycle}" in
 
   da*|--da*)          mkLevel1; mkLevel2;;
 
+#  week*|--week*)      mkLevel3;; #DEBUG
   week*|--week*)      mkLevel1; mkLevel2; mkLevel3;;
-
-# week*|--week*)      mkLevel3;; #DEBUG
 esac
