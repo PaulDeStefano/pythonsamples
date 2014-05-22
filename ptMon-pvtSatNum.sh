@@ -138,7 +138,7 @@ function getLeastFilesByName()
   for file in $( cat ${fileList} ); do {
     local fileYear=$( echo "${file}" | sed -r 's/.*yr(..).*/\1/' )
     local fileDay=$( echo "${file}" |  sed -r 's/.*day(..).*/\1/' )
-    if expr ${fileDay} '>=' ${startDay} >/dev/null && ${fileYear} -eq ${startYear} ; then {
+    if expr ${fileDay} '>=' ${startDay} >/dev/null && [ ${fileYear} = ${startYear} ]; then {
       echo "${file}" >> "${newFileList}"
     } fi
 
@@ -244,7 +244,7 @@ function mkPlots()
   # find minimal data by exluding data before and after
   beginLine=$(grep --max-count=2 --line-number "^${startTime}" "${datFileName}" | cut -d':' -f1)
   endLine=$(grep --max-count=2 --line-number "^$((${endTime}-16))" "${datFileName}" | cut -d':' -f1)
-  # TODO check to see if more then one number is returned
+  # TODO check to see if more than one number is returned
   if [[ -z "${beginLine}" ]]; then logMsg "ERROR: data doesn't include startTime: ${startTime}"; exit 1; fi
   local newDatFile=${tmpDir}/newDatFile
   # rebuild file

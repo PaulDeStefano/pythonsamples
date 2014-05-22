@@ -707,9 +707,9 @@ function mkPlots() {
   #local currTime=$( date --utc --iso-8601=minutes)
   local currTime=$( date --utc )
   pltTitle="PT GPS (${siteName}), Rb - PPP GNSS Time: ${startSpec} -- ${endSpec} (UTC)\nplot created ${currTime}"
-  DEBUG mkPlotsFromFile "${labels}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points pointsize 0.5" "no" "yes"
-  DEBUG mv outfile.png outfile.clkns.png
-  DEBUG pltTypeList="clkns"
+  mkPlotsFromFile "${labels}" "${startSpec}" "${endSpec}" "${pltTitle}" 1 2 "points pointsize 0.5" "no" "yes"
+  mv outfile.png outfile.clkns.png
+  pltTypeList="clkns"
   rm *.dat # clean up copies made to sent to gnuplot
   
   # check for ND280, no point in going further
