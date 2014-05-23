@@ -155,7 +155,7 @@ function mkPlots()
 
   #local currTime=$( date --utc --iso-8601=minutes)
   local currTime=$( date --utc )
-  local pltTitle="TIC Measurement (uncorrected) (${site}): ${startSpec} -- ${endSpec}\nplot created ${currTime}"
+  local pltTitle="TIC Measurement (PT-OT uncorrected) (${site}): ${startSpec} -- ${endSpec}\nplot created ${currTime}"
   #local style="points pointtype 1 linewidth 1 linecolor 1"
   # run plotter
   #gnuplot ${GNUPLOT_LIB}/pt-plotgen.gpt ${startTime} ${tmpDir}/plot.png "using ${unixTimeColumn}:${dataColumn}" "test title" "${filesToPlot}"
